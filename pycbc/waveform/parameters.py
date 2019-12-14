@@ -193,6 +193,15 @@ eccentricity = Parameter("eccentricity",
                 dtype=float, default=0., label=r"$e$",
                 description="Eccentricity.")
 
+#testing GR parameters 
+parity_log10lambdatilt = Parameter("parity_log10lambdatilt",
+                dtype=float, default=0., label=r"$\log_{10}\tilde{\Lambda}$",
+                description="The logrithm of parity violating parameter lambda tilt.")
+
+parity_alpha = Parameter("parity_alpha",
+                dtype=int, default=0, label=r"$\alpha$",
+                description="The power index of the parity violating dispersion relation.")
+
 # derived parameters (these are not used for waveform generation) for masses
 mchirp = Parameter("mchirp",
                 dtype=float, label=r"$\mathcal{M}~(\mathrm{M}_\odot)$",
@@ -455,6 +464,10 @@ mode_array = Parameter("mode_array",
 #
 # =============================================================================
 #
+#testing GR parameters
+
+testingGR_params = ParameterList([parity_alpha,parity_log10lambdatilt])
+
 
 # parameters describing the location of a binary w.r.t. the Earth. Note: we
 # do not include distance here. This is because these parameters are not
@@ -477,7 +490,7 @@ extrinsic_params = orientation_params + location_params
 cbc_intrinsic_params = ParameterList\
     ([mass1, mass2, spin1x, spin1y, spin1z, spin2x, spin2y, spin2z,
       eccentricity, lambda1, lambda2, dquad_mon1, dquad_mon2, lambda_octu1,
-      lambda_octu2, quadfmode1, quadfmode2, octufmode1, octufmode2])
+      lambda_octu2, quadfmode1, quadfmode2, octufmode1, octufmode2]) + testingGR_params
 
 # the parameters of a cbc in the radiation frame
 cbc_rframe_params = cbc_intrinsic_params + orientation_params

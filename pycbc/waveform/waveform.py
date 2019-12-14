@@ -87,6 +87,10 @@ def _check_lal_pars(p):
     lal_pars = lal.CreateDict()
     #nonGRparams can be straightforwardly added if needed, however they have to
     # be invoked one by one
+    if p['parity_alpha']!=0:
+        lalsimulation.SimInspiralWaveformParamsInsertNonGRParityAlpha(lal_pars,int(p['parity_alpha']))
+    if p['parity_log10lambdatilt']!=0.0:
+        lalsimulation.SimInspiralWaveformParamsInsertNonGRParitylog10LambdaTilt(lal_pars,p['parity_log10lambdatilt'])
     if p['phase_order']!=-1:
         lalsimulation.SimInspiralWaveformParamsInsertPNPhaseOrder(lal_pars,int(p['phase_order']))
     if p['amplitude_order']!=-1:
