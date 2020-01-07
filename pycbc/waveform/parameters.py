@@ -194,12 +194,16 @@ eccentricity = Parameter("eccentricity",
                 description="Eccentricity.")
 
 #testing GR parameters 
-parity_log10lambdatilt = Parameter("parity_log10lambdatilt",
-                dtype=float, default=0., label=r"$\log_{10}\tilde{\Lambda}$",
-                description="The logrithm of parity violating parameter lambda tilt.")
+parity_log10Aeff = Parameter("parity_log10Aeff",
+                dtype=float, default=0., label=r"$\log_{10}A_\mathrm{eff}$",
+                description="The logrithm of parity violating parameter Aeff.")
 
-parity_alpha = Parameter("parity_alpha",
-                dtype=int, default=0, label=r"$\alpha$",
+parity_Aeff = Parameter("parity_Aeff",
+                dtype=float, default=0., label=r"$A_\mathrm{eff}$",
+                description="The parity violating parameter Aeff.")
+
+parity_beta = Parameter("parity_beta",
+                dtype=int, default=0, label=r"$\beta$",
                 description="The power index of the parity violating dispersion relation.")
 
 # derived parameters (these are not used for waveform generation) for masses
@@ -466,7 +470,7 @@ mode_array = Parameter("mode_array",
 #
 #testing GR parameters
 
-testingGR_params = ParameterList([parity_alpha,parity_log10lambdatilt])
+testingGR_params = ParameterList([parity_beta,parity_log10Aeff,parity_Aeff])
 
 
 # parameters describing the location of a binary w.r.t. the Earth. Note: we
