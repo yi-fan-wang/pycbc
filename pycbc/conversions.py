@@ -31,6 +31,7 @@ from __future__ import division
 
 import copy
 import numpy
+from scipy import integrate
 import lal
 import lalsimulation as lalsim
 from pycbc.detector import Detector
@@ -415,6 +416,25 @@ def lambda_from_mass_tov_file(mass, tov_file, distance=0.):
     mass_src = mass/(1.0 + pycbc.cosmology.redshift(distance))
     lambdav = numpy.interp(mass_src, mass_from_file, lambda_from_file)
     return lambdav
+
+def integrand_parityaeff(redshift, parity_beta):
+    """
+    The integrand:
+    (1.0 + z)^parity_beta / sqrt(Omega_m (1+z)^3 + Omega_Lambda)
+    """
+    omega_m = 0.3075 #pycbc.cosmology.get_cosmology().Om0 # matter density
+    omega_l = 0.6910098821161554 #pycbc.cosmology.get_cosmology().Ode0 # dark energy density
+
+    return (1.0+redshift)**(parity_beta)/ numpy.sqrt(omega_m*(1.0+redshift)**3.0 + omega_l)
+
+def mpvinverse_from_parityaeff(parity_beta, parity_aeff, distance):
+    """
+
+    """
+    redshift = pycbc.cosmology.redshift(distance)
+    dist = integrate.quad(integrand_parityaeff, 0, redshift ,args=(parity_beta))[0]
+
+    return (parity_aeff / dist ) ** (1.0 / parity_beta) 
 
 #
 # =============================================================================
@@ -1503,7 +1523,8 @@ __all__ = ['dquadmon_from_lambda', 'lambda_tilde',
            'tau3_from_mtotal_eta', 'tau0_from_mass1_mass2',
            'tau3_from_mass1_mass2', 'mtotal_from_tau0_tau3',
            'eta_from_tau0_tau3', 'mass1_from_tau0_tau3',
-           'mass2_from_tau0_tau3', 'primary_spin', 'secondary_spin',
+           'mass2_from_tau0_tau3', 'mpvinverse_from_parityaeff', 
+           'primary_spin', 'secondary_spin',
            'chi_eff', 'chi_a', 'chi_p', 'phi_a', 'phi_s',
            'primary_xi', 'secondary_xi',
            'xi1_from_spin1x_spin1y', 'xi2_from_mass1_mass2_spin2x_spin2y',

@@ -1196,6 +1196,41 @@ class LambdaFromMultipleTOVFiles(BaseTransform):
             out = {self._lambda_param : numpy.nan}
             return self.format_output(maps, out)
 
+class MpvinverseFromParityaeff(BaseTransform):
+    """
+    """
+
+    name = 'mpvinverse_from_parityaeff'
+    inverse = None
+    _inputs = [parameters.parity_aeff]
+    _outputs = [parameters.mpvinverse]
+
+    def transform(self, maps):
+        """ This function transforms from distance to redshift.
+
+        Parameters
+        ----------
+        maps : a mapping object
+
+        Examples
+        --------
+        Convert a dict of numpy.array:
+
+        >>> import numpy
+        >>> from pycbc import transforms
+        >>> t = transforms.DistanceToRedshift()
+        >>> t.transform({'distance': numpy.array([1000])})
+            {'distance': array([1000]), 'redshift': 0.19650987609144363}
+
+        Returns
+        -------
+        out : dict
+            A dict with key as parameter name and value as numpy.array or float
+            of transformed values.
+        """
+        out = {parameters.redshift : cosmology.redshift(
+                                                    maps[parameters.distance])}
+        return self.format_output(maps, out)
 
 class Log(BaseTransform):
     """Applies a log transform from an `inputvar` parameter to an `outputvar`
