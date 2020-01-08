@@ -194,11 +194,11 @@ eccentricity = Parameter("eccentricity",
                 description="Eccentricity.")
 
 #testing GR parameters 
-parity_log10Aeff = Parameter("parity_log10aeff",
+parity_log10aeff = Parameter("parity_log10aeff",
                 dtype=float, default=0., label=r"$\log_{10}A_\mathrm{eff}$",
                 description="The logrithm of parity violating parameter Aeff.")
 
-parity_Aeff = Parameter("parity_aeff",
+parity_aeff = Parameter("parity_aeff",
                 dtype=float, default=0., label=r"$A_\mathrm{eff}$",
                 description="The parity violating parameter Aeff.")
 
@@ -470,7 +470,7 @@ mode_array = Parameter("mode_array",
 #
 #testing GR parameters
 
-testingGR_params = ParameterList([parity_beta,parity_log10Aeff,parity_Aeff])
+testingGR_params = ParameterList([parity_beta,parity_log10aeff,parity_aeff])
 
 
 # parameters describing the location of a binary w.r.t. the Earth. Note: we
