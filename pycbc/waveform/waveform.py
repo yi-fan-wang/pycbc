@@ -87,12 +87,6 @@ def _check_lal_pars(p):
     lal_pars = lal.CreateDict()
     #nonGRparams can be straightforwardly added if needed, however they have to
     # be invoked one by one
-    if p['parity_beta']!=0:
-        lalsimulation.SimInspiralWaveformParamsInsertNonGRParitybeta(lal_pars,int(p['parity_beta']))
-    if p['parity_Aeff']!=0.0:
-        lalsimulation.SimInspiralWaveformParamsInsertNonGRParityAeff(lal_pars,p['parity_Aeff'])
-    if p['parity_log10Aeff']!=0.0:
-        lalsimulation.SimInspiralWaveformParamsInsertNonGRParitylog10Aeff(lal_pars,p['parity_log10Aeff'])
     if p['phase_order']!=-1:
         lalsimulation.SimInspiralWaveformParamsInsertPNPhaseOrder(lal_pars,int(p['phase_order']))
     if p['amplitude_order']!=-1:
@@ -136,6 +130,13 @@ def _check_lal_pars(p):
         for l,m in p['mode_array']:
             lalsimulation.SimInspiralModeArrayActivateMode(ma, l, m)
         lalsimulation.SimInspiralWaveformParamsInsertModeArray(lal_pars, ma)
+
+    if p['parity_beta'] is not None:
+        lalsimulation.SimInspiralWaveformParamsInsertNonGRParitybeta(lal_pars,int(p['parity_beta']))
+    if p['parity_Aeff'] is not None:
+        lalsimulation.SimInspiralWaveformParamsInsertNonGRParityAeff(lal_pars,p['parity_Aeff'])
+    if p['parity_log10Aeff'] is not None:
+        lalsimulation.SimInspiralWaveformParamsInsertNonGRParitylog10Aeff(lal_pars,p['parity_log10Aeff'])
 
     return lal_pars
 
