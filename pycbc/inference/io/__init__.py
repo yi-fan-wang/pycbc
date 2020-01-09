@@ -30,6 +30,7 @@ import h5py as _h5py
 from pycbc.io.record import FieldArray, _numpy_function_lib
 from pycbc import transforms as _transforms
 from pycbc import waveform as _waveform
+from pycbc import conversions as _conversions
 
 from pycbc.inference.option_utils import (ParseLabelArg, ParseParametersArg)
 from .emcee import EmceeFile
@@ -664,10 +665,9 @@ def results_from_cli(opts, load_samples=True, **kwargs):
 
             # transform the parity_aeff to parity_mpvinverse
             # this is a temp
-            
+
             if opts.transform_aeff_to_mpvinverse is True:
-                parity_beta = opts.parity_beta
-                samples['parity_aeff'] = conversion.mpvinverse_from_parityaeff(parity_beta, samples['parity_aeff'], samples['redshift'])
+                samples['parity_aeff'] = _conversions.mpvinverse_from_parityaeff(opts.parity_beta, samples['parity_aeff'], samples['redshift'])
 
             if input_file in constraints:
                 logging.info("Applying constraints")

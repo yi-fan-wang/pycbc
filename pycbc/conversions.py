@@ -36,6 +36,7 @@ import lal
 import lalsimulation as lalsim
 from pycbc.detector import Detector
 import pycbc.cosmology
+
 from .coordinates import spherical_to_cartesian as _spherical_to_cartesian
 
 #
@@ -431,9 +432,18 @@ def mpvinverse_from_parityaeff(parity_beta, parity_aeff, redshift):
     """
 
     """
-    dist = integrate.quad(integrand_parityaeff, 0, redshift ,args=(parity_beta))[0]
-
-    return (parity_aeff / dist ) ** (1.0 / parity_beta) 
+    aeffval, input_is_array = ensurearray(parity_aeff)
+    redshiftval, input_is_array = ensurearray(redshift)
+    # make sure aeffval is atleast 1D
+    #if aeffval.size == 1 and aeffval.ndim == 0:
+    #    aeffval = aeffval.reshape(1)
+    #if redshiftval.size == 1 and redshiftval.ndim == 0:
+    #    redshiftval = redshiftval.reshape(1)
+    zs = numpy.zeros(aeffval.shape, dtype=float)  # the output array
+    for (ii, val) in enumerate(aeffval):
+        zs[ii] = integrate.quad(integrand_parityaeff, 0, redshiftval[ii] ,args=(parity_beta))[0]
+    result = (parity_aeff / zs ) ** (1.0 / parity_beta)
+    return  formatreturn(result , input_is_array)
 
 #
 # =============================================================================
