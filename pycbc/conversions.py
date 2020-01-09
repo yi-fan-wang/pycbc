@@ -427,11 +427,10 @@ def integrand_parityaeff(redshift, parity_beta):
 
     return (1.0+redshift)**(parity_beta)/ numpy.sqrt(omega_m*(1.0+redshift)**3.0 + omega_l)
 
-def mpvinverse_from_parityaeff(parity_beta, parity_aeff, distance):
+def mpvinverse_from_parityaeff(parity_beta, parity_aeff, redshift):
     """
 
     """
-    redshift = pycbc.cosmology.redshift(distance)
     dist = integrate.quad(integrand_parityaeff, 0, redshift ,args=(parity_beta))[0]
 
     return (parity_aeff / dist ) ** (1.0 / parity_beta) 

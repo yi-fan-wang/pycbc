@@ -1203,7 +1203,7 @@ class MpvinverseFromParityaeff(BaseTransform):
     name = 'mpvinverse_from_parityaeff'
     inverse = None
     _inputs = [parameters.parity_aeff]
-    _outputs = [parameters.mpvinverse]
+    _outputs = [parameters.parity_mpvinverse]
 
     def transform(self, maps):
         """ This function transforms from distance to redshift.
@@ -1212,25 +1212,16 @@ class MpvinverseFromParityaeff(BaseTransform):
         ----------
         maps : a mapping object
 
-        Examples
-        --------
-        Convert a dict of numpy.array:
-
-        >>> import numpy
-        >>> from pycbc import transforms
-        >>> t = transforms.DistanceToRedshift()
-        >>> t.transform({'distance': numpy.array([1000])})
-            {'distance': array([1000]), 'redshift': 0.19650987609144363}
-
         Returns
         -------
         out : dict
             A dict with key as parameter name and value as numpy.array or float
             of transformed values.
         """
-        out = {parameters.redshift : cosmology.redshift(
-                                                    maps[parameters.distance])}
-        return self.format_output(maps, out)
+        #out = {parameters.parity_mpvinverse : conversions.redshift(
+        #                                            maps[parameters.parity_aeff])}
+        #return self.format_output(maps, out)
+        pass
 
 class Log(BaseTransform):
     """Applies a log transform from an `inputvar` parameter to an `outputvar`

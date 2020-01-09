@@ -662,6 +662,13 @@ def results_from_cli(opts, load_samples=True, **kwargs):
             # add parameters not included in file
             samples = _transforms.apply_transforms(samples, ts)
 
+            # transform the parity_aeff to parity_mpvinverse
+            # this is a temp
+            
+            if opts.transform_aeff_to_mpvinverse is True:
+                parity_beta = opts.parity_beta
+                samples['parity_aeff'] = conversion.mpvinverse_from_parityaeff(parity_beta, samples['parity_aeff'], samples['redshift'])
+
             if input_file in constraints:
                 logging.info("Applying constraints")
                 mask = samples[constraints[input_file]]

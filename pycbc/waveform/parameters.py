@@ -202,6 +202,10 @@ parity_aeff = Parameter("parity_aeff",
                 dtype=float, default=0., label=r"$A_\mathrm{eff}$",
                 description="The parity violating parameter Aeff.")
 
+parity_mpvinverse = Parameter("parity_mpvinverse",
+                dtype=float, default=0., label=r"$M_\mathrm{PV}^{-1}$",
+                description="The parity violating parameter M_PV^{-1}.")
+
 parity_beta = Parameter("parity_beta",
                 dtype=int, default=0, label=r"$\beta$",
                 description="The power index of the parity violating dispersion relation.")
