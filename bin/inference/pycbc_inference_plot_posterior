@@ -63,7 +63,7 @@ parser.add_argument("--plot-prior", nargs="+", type=str,
 parser.add_argument("--prior-nsamples", type=int, default=10000,
                     help="The number of samples to use for plotting the "
                          "prior. Default is 10000.")
-parser.add_argument('--tranform_aeff_to_mpvinverse', action="store_true", default=False)
+parser.add_argument("--tranform_aeff_to_mpvinverse", action="store_true")
 parser.add_argument("--parity_beta", type=int, default=0,
                     help="The power index of parity violation to transform aeff to mpv inverse.")
 # add options for what plots to create
