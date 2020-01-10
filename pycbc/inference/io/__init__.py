@@ -654,6 +654,10 @@ def results_from_cli(opts, load_samples=True, **kwargs):
             file_parameters, ts = _transforms.get_common_cbc_transforms(
                 opts.parameters, fp.variable_params)
 
+            if 'distance' not in file_parameters and opts.transform_aeff_to_mpvinverse is True:
+                file_parameters += ['distance']
+                ts.append(_transforms.DistanceToRedshift())
+
             # read samples from file
             samples = fp.samples_from_cli(opts, parameters=file_parameters,
                                           **kwargs)
@@ -664,10 +668,10 @@ def results_from_cli(opts, load_samples=True, **kwargs):
             samples = _transforms.apply_transforms(samples, ts)
 
             # transform the parity_aeff to parity_mpvinverse
-            # this is a temp
+            # this is a temporary function, needed to be improved
 
             if opts.transform_aeff_to_mpvinverse is True:
-                samples['parity_aeff'] = _conversions.mpvinverse_from_parityaeff(float(opts.parity_beta), samples['parity_aeff'], samples['redshift'])
+                samples['parity_aeff'] = _conversions.mpvinverse_from_parityaeff(opts.parity_beta, samples['parity_aeff'], samples['redshift'])
 
             if input_file in constraints:
                 logging.info("Applying constraints")

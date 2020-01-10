@@ -432,6 +432,9 @@ def mpvinverse_from_parityaeff(parity_beta, parity_aeff, redshift):
     """
 
     """
+    print parity_beta
+    print parity_aeff
+    print "redshift", redshift
     aeffval, input_is_array = ensurearray(parity_aeff)
     redshiftval, input_is_array = ensurearray(redshift)
     # make sure aeffval is atleast 1D
