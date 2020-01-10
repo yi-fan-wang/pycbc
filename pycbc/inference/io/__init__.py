@@ -669,7 +669,6 @@ def results_from_cli(opts, load_samples=True, **kwargs):
 
             # transform the parity_aeff to parity_mpvinverse
             # this is a temporary function, needed to be improved
-
             if opts.transform_aeff_to_mpvinverse is True:
                 samples['parity_aeff'] = _conversions.mpvinverse_from_parityaeff(opts.parity_beta, samples['parity_aeff'], samples['redshift'])
 
