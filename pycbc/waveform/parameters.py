@@ -210,6 +210,15 @@ parity_beta = Parameter("parity_beta",
                 dtype=int, default=0, label=r"$\beta$",
                 description="The power index of the parity violating dispersion relation.")
 
+parity_aeff_amp = Parameter("parity_aeff_amp",
+                dtype=float, default=0., label=r"$A_\mathrm{eff}$",
+                description="The parity violating parameter Aeff for amplitude birefringence.")
+parity_beta_amp = Parameter("parity_beta_amp",
+                dtype=int, default=0, label=r"$\beta$",
+                description="The power index of the parity violating dispersion relation for amplitude birefringence.")
+
+
+
 # derived parameters (these are not used for waveform generation) for masses
 mchirp = Parameter("mchirp",
                 dtype=float, label=r"$\mathcal{M}~(\mathrm{M}_\odot)$",
@@ -474,7 +483,7 @@ mode_array = Parameter("mode_array",
 #
 #testing GR parameters
 
-testingGR_params = ParameterList([parity_beta,parity_log10aeff,parity_aeff])
+testingGR_params = ParameterList([parity_beta,parity_log10aeff,parity_aeff,parity_aeff_amp,parity_beta_amp])
 
 
 # parameters describing the location of a binary w.r.t. the Earth. Note: we

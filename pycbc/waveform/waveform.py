@@ -137,6 +137,10 @@ def _check_lal_pars(p):
         lalsimulation.SimInspiralWaveformParamsInsertNonGRParityAeff(lal_pars,p['parity_aeff'])
     if p['parity_log10aeff'] is not None:
         lalsimulation.SimInspiralWaveformParamsInsertNonGRParitylog10Aeff(lal_pars,p['parity_log10aeff'])
+    if p['parity_aeff_amp'] is not None:
+        lalsimulation.SimInspiralWaveformParamsInsertNonGRParityAh(lal_pars,p['parity_aeff_amp'])
+    if p['parity_beta_amp'] is not None:
+        lalsimulation.SimInspiralWaveformParamsInsertNonGRParitybetanu(lal_pars,p['parity_beta_amp'])
 
     return lal_pars
 
