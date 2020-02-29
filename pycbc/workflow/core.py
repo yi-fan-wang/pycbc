@@ -251,8 +251,8 @@ class Executable(pegasus_workflow.Executable):
                 self.needs_fetching = True
 
             self.add_pfn(exe_path, site=exe_site)
-            logging.debug("Using %s executable "
-                          "at %s on site %s" % (name, exe_url.path, exe_site))
+            logging.info("Using %s executable "
+                         "at %s on site %s" % (name, exe_url.path, exe_site))
 
         # Determine the condor universe if we aren't given one
         if self.universe is None:
@@ -261,7 +261,7 @@ class Executable(pegasus_workflow.Executable):
             else:
                 self.universe = 'vanilla'
 
-        logging.debug("%s executable will run as %s universe"
+        logging.info("%s executable will run as %s universe"
                      % (name, self.universe))
 
         self.set_universe(self.universe)
@@ -622,7 +622,7 @@ class Workflow(pegasus_workflow.Workflow):
         super(Workflow, self).__init__(name)
 
         # Parse ini file
-        self.cp = WorkflowConfigParser.from_args(args)
+        self.cp = WorkflowConfigParser.from_cli(args)
 
         # Set global values
         start_time = int(self.cp.get("workflow", "start-time"))
@@ -821,13 +821,16 @@ class Workflow(pegasus_workflow.Workflow):
             The FileList object with the configuration file.
         """
         cp = self.cp if cp is None else cp
-        ini_file_path = os.path.join(output_dir, fname)
+        ini_file_path = os.path.abspath(os.path.join(output_dir, fname))
         with open(ini_file_path, "w") as fp:
             cp.write(fp)
-        ini_file = FileList([File(self.ifos, "",
-                                  self.analysis_time,
-                                  file_url="file://" + ini_file_path)])
-        return ini_file
+        ini_file = File(self.ifos, "", self.analysis_time,
+                        file_url="file://" + ini_file_path)
+        # set the physical file name
+        ini_file.PFN(ini_file_path, "local")
+        # set the storage path to be the same
+        ini_file.storage_path = ini_file_path
+        return FileList([ini_file])
 
 class Node(pegasus_workflow.Node):
     def __init__(self, executable):
@@ -1923,7 +1926,7 @@ def make_external_call(cmdList, out_dir=None, out_basename='external_call',
         outFP = None
 
     msg = "Making external call %s" %(' '.join(cmdList))
-    logging.debug(msg)
+    logging.info(msg)
     errCode = subprocess.call(cmdList, stderr=errFP, stdout=outFP,\
                               shell=shell)
     if errFP:
@@ -1934,7 +1937,7 @@ def make_external_call(cmdList, out_dir=None, out_basename='external_call',
     if errCode and fail_on_error:
         raise CalledProcessErrorMod(errCode, ' '.join(cmdList),
                 errFile=errFile, outFile=outFile, cmdFile=cmdFile)
-    logging.debug("Call successful, or error checking disabled.")
+    logging.info("Call successful, or error checking disabled.")
 
 class CalledProcessErrorMod(Exception):
     """

@@ -17,114 +17,12 @@
 """This module contains standard options used for inference-related programs.
 """
 
-import logging
 import argparse
 
 from six import string_types
 
-from pycbc.psd import from_cli_multi_ifos as psd_from_cli_multi_ifos
-from pycbc.strain import from_cli_multi_ifos as strain_from_cli_multi_ifos
-from pycbc.strain import (gates_from_cli, psd_gates_from_cli,
-                          apply_gates_to_td, apply_gates_to_fd)
-from pycbc.types import MultiDetOptionAction
 from pycbc import waveform
 from pycbc import distributions
-
-
-# -----------------------------------------------------------------------------
-#
-#                       Utilities for loading data
-#
-# -----------------------------------------------------------------------------
-
-
-def add_low_frequency_cutoff_opt(parser):
-    """Adds the low-frequency-cutoff option to the given parser."""
-    parser.add_argument("--data-conditioning-low-freq", type=float,
-                        nargs="+", action=MultiDetOptionAction,
-                        metavar='IFO:FLOW', dest="low_frequency_cutoff",
-                        help="Low frequency cutoff of the data. Needed for "
-                             "PSD estimation and when creating fake strain.")
-
-
-def data_from_cli(opts):
-    """Loads the data needed for a model from the given
-    command-line options. Gates specifed on the command line are also applied.
-
-    Parameters
-    ----------
-    opts : ArgumentParser parsed args
-        Argument options parsed from a command line string (the sort of thing
-        returned by `parser.parse_args`).
-
-    Returns
-    -------
-    strain_dict : dict
-        Dictionary of instruments -> `TimeSeries` strain.
-    stilde_dict : dict
-        Dictionary of instruments -> `FrequencySeries` strain.
-    psd_dict : dict
-        Dictionary of instruments -> `FrequencySeries` psds.
-    """
-    # get gates to apply
-    gates = gates_from_cli(opts)
-    psd_gates = psd_gates_from_cli(opts)
-
-    # get strain time series
-    instruments = opts.instruments if opts.instruments is not None else []
-    strain_dict = strain_from_cli_multi_ifos(opts, instruments,
-                                             precision="double")
-    # apply gates if not waiting to overwhiten
-    if not opts.gate_overwhitened:
-        strain_dict = apply_gates_to_td(strain_dict, gates)
-
-    # get strain time series to use for PSD estimation
-    # if user has not given the PSD time options then use same data as analysis
-    if opts.psd_start_time and opts.psd_end_time:
-        logging.info("Will generate a different time series for PSD "
-                     "estimation")
-        psd_opts = opts
-        psd_opts.gps_start_time = psd_opts.psd_start_time
-        psd_opts.gps_end_time = psd_opts.psd_end_time
-        psd_strain_dict = strain_from_cli_multi_ifos(psd_opts,
-                                                     instruments,
-                                                     precision="double")
-        # apply any gates
-        logging.info("Applying gates to PSD data")
-        psd_strain_dict = apply_gates_to_td(psd_strain_dict, psd_gates)
-
-    elif opts.psd_start_time or opts.psd_end_time:
-        raise ValueError("Must give --psd-start-time and --psd-end-time")
-    else:
-        psd_strain_dict = strain_dict
-
-    # FFT strain and save each of the length of the FFT, delta_f, and
-    # low frequency cutoff to a dict
-    stilde_dict = {}
-    length_dict = {}
-    delta_f_dict = {}
-    for ifo in instruments:
-        stilde_dict[ifo] = strain_dict[ifo].to_frequencyseries()
-        length_dict[ifo] = len(stilde_dict[ifo])
-        delta_f_dict[ifo] = stilde_dict[ifo].delta_f
-
-    # get PSD as frequency series
-    psd_dict = psd_from_cli_multi_ifos(
-        opts, length_dict, delta_f_dict, opts.low_frequency_cutoff,
-        instruments, strain_dict=psd_strain_dict, precision="double")
-
-    # apply any gates to overwhitened data, if desired
-    if opts.gate_overwhitened and opts.gate is not None:
-        logging.info("Applying gates to overwhitened data")
-        # overwhiten the data
-        for ifo in gates:
-            stilde_dict[ifo] /= psd_dict[ifo]
-        stilde_dict = apply_gates_to_fd(stilde_dict, gates)
-        # unwhiten the data for the model
-        for ifo in gates:
-            stilde_dict[ifo] *= psd_dict[ifo]
-
-    return strain_dict, stilde_dict, psd_dict
 
 
 # -----------------------------------------------------------------------------
@@ -238,6 +136,22 @@ class ParseParametersArg(ParseLabelArg):
                 pass
 
 
+def add_injsamples_map_opt(parser):
+    """Adds option to parser to specify a mapping between injection parameters
+    an sample parameters.
+    """
+    parser.add_argument('--injection-samples-map', nargs='+',
+                        metavar='INJECTION_PARAM:SAMPLES_PARAM',
+                        help='Rename/apply functions to the injection '
+                             'parameters and name them the same as one of the '
+                             'parameters in samples. This can be used if the '
+                             'injection parameters are not the same as the '
+                             'samples parameters. INJECTION_PARAM may be a '
+                             'function of the injection parameters; '
+                             'SAMPLES_PARAM must a name of one of the '
+                             'parameters in the samples group.')
+
+
 def add_plot_posterior_option_group(parser):
     """Adds the options needed to configure plots of posterior results.
 
@@ -302,6 +216,7 @@ def add_plot_posterior_option_group(parser):
                              "injection in the file to work. Any values "
                              "specified by expected-parameters will override "
                              "the values obtained for the injection.")
+    add_injsamples_map_opt(pgroup)
     return pgroup
 
 

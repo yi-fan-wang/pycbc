@@ -82,6 +82,18 @@ class LiveSingle(object):
 
     @classmethod
     def from_cli(cls, args, ifo):
+        sngl_opts_required = all([args.single_fit_file,
+                                  args.single_reduced_chisq_threshold,
+                                  args.single_duration_threshold,
+                                  args.single_newsnr_threshold])
+        if args.enable_single_detector_background and not sngl_opts_required:
+            raise RuntimeError("Single detector trigger options "
+                               "(--single-fit-file, "
+                               "--single-reduced-chisq-threshold, "
+                               "--single-duration-threshold, "
+                               "--single-newsnr-threshold) "
+                               "must ALL be given if single detector "
+                               "background is enabled")
         return cls(
            ifo, newsnr_threshold=args.single_newsnr_threshold[ifo],
            reduced_chisq_threshold=args.single_reduced_chisq_threshold[ifo],
@@ -148,5 +160,5 @@ class LiveSingle(object):
         rate_louder = rate * fits.cum_fit('exponential', [newsnr],
                                           coeff, self.fit_info['thresh'])[0]
         # apply a trials factor of the number of duration bins
-        rate_louder /= len(self.fit_info['rates'])
+        rate_louder *= len(self.fit_info['rates'])
         return conv.sec_to_year(1. / rate_louder)

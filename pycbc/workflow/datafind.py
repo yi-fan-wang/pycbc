@@ -358,7 +358,7 @@ def setup_datafind_workflow(workflow, scienceSegs, outputDir, seg_file=None,
 def setup_datafind_runtime_cache_multi_calls_perifo(cp, scienceSegs,
                                                     outputDir, tags=None):
     """
-    This function uses the glue.datafind library to obtain the location of all
+    This function uses the `gwdatafind` library to obtain the location of all
     the frame files that will be needed to cover the analysis of the data
     given in scienceSegs. This function will not check if the returned frames
     cover the whole time requested, such sanity checks are done in the
@@ -416,7 +416,7 @@ def setup_datafind_runtime_cache_multi_calls_perifo(cp, scienceSegs,
         for seg in scienceSegsIfo:
             msg = "Finding data between %d and %d " %(seg[0],seg[1])
             msg += "for ifo %s" %(ifo)
-            logging.debug(msg)
+            logging.info(msg)
             # WARNING: For now the workflow will expect times to be in integer seconds
             startTime = int(seg[0])
             endTime = int(seg[1])
@@ -438,7 +438,7 @@ def setup_datafind_runtime_cache_multi_calls_perifo(cp, scienceSegs,
 def setup_datafind_runtime_cache_single_call_perifo(cp, scienceSegs, outputDir,
                                               tags=None):
     """
-    This function uses the glue.datafind library to obtain the location of all
+    This function uses the `gwdatafind` library to obtain the location of all
     the frame files that will be needed to cover the analysis of the data
     given in scienceSegs. This function will not check if the returned frames
     cover the whole time requested, such sanity checks are done in the
@@ -518,7 +518,7 @@ def setup_datafind_runtime_cache_single_call_perifo(cp, scienceSegs, outputDir,
 def setup_datafind_runtime_frames_single_call_perifo(cp, scienceSegs,
                                               outputDir, tags=None):
     """
-    This function uses the glue.datafind library to obtain the location of all
+    This function uses the `gwdatafind` library to obtain the location of all
     the frame files that will be needed to cover the analysis of the data
     given in scienceSegs. This function will not check if the returned frames
     cover the whole time requested, such sanity checks are done in the
@@ -568,7 +568,7 @@ def setup_datafind_runtime_frames_single_call_perifo(cp, scienceSegs,
 def setup_datafind_runtime_frames_multi_calls_perifo(cp, scienceSegs,
                                                      outputDir, tags=None):
     """
-    This function uses the glue.datafind library to obtain the location of all
+    This function uses the `gwdatafind` library to obtain the location of all
     the frame files that will be needed to cover the analysis of the data
     given in scienceSegs. This function will not check if the returned frames
     cover the whole time requested, such sanity checks are done in the
@@ -899,7 +899,7 @@ def run_datafind_instance(cp, outputDir, connection, observatory, frameType,
         commands for reproducing what is done in this function to this
         directory.
     connection : datafind connection object
-        Initialized through the glue.datafind module, this is the open
+        Initialized through the `gwdatafind` module, this is the open
         connection to the datafind server.
     observatory : string
         The observatory to query frames for. Ex. 'H', 'L' or 'V'.  NB: not
@@ -953,8 +953,10 @@ def run_datafind_instance(cp, outputDir, connection, observatory, frameType,
     log_datafind_command(observatory, frameType, startTime, endTime,
                          os.path.join(outputDir,'logs'), **dfKwargs)
     logging.debug("Asking datafind server for frames.")
-    dfCache = connection.find_frame_urls(observatory, frameType,
-                                        startTime, endTime, **dfKwargs)
+    dfCache = lal.Cache.from_urls(
+        connection.find_frame_urls(observatory, frameType,
+                                   startTime, endTime, **dfKwargs),
+    )
     logging.debug("Frames returned")
     # workflow format output file
     cache_file = File(ifo, 'DATAFIND', seg, extension='lcf',

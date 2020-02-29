@@ -195,8 +195,8 @@ for i in range(2, len(insps)+1):
         pivot_ifo, fixed_ifo, ordered_ifo_list = wf.get_ordered_ifo_list(ifocomb, ifo_ids)
 
         # Create coinc tag, and set up the coinc job for the combination
-        coinctag = '{}det_'.format(len(ifocomb)) + ordered_ifo_list
-        ctagcomb = [tag, 'full', coinctag]
+        coinctag = '{}det'.format(len(ifocomb))
+        ctagcomb = [tag, 'full', coinctag, ordered_ifo_list]
 
         bg_file = wf.setup_multiifo_interval_coinc(
             workflow, hdfbank, inspcomb, statfiles, final_veto_file,
@@ -217,8 +217,8 @@ else:
         for ifocomb in combinations:
             _, _, ordered_ifo_list = wf.get_ordered_ifo_list(ifocomb, ifo_ids)
             # Create coinc tag
-            coinctag = '{}det_'.format(len(ifocomb)) + ordered_ifo_list
-            ctagcomb = [tag, 'full', coinctag]
+            coinctag = '{}det'.format(len(ifocomb))
+            ctagcomb = [tag, 'full', coinctag, ordered_ifo_list]
             other_ifo_keys = no_fg_exc_files.keys()
             other_ifo_keys.remove(ordered_ifo_list)
             other_bg_files = {ctype: no_fg_exc_files[ctype] for ctype in other_ifo_keys}
@@ -406,12 +406,14 @@ for insp_file in full_insps:
 #                                    rdir['open_box_result/significance'],
 #                                    cumulative=False,
 #                                    tags=combined_bg_file.tags + ['ifar'])
-#ifar_ob = wf.make_ifar_plot(workflow, combined_bg_file,
-#                            rdir['open_box_result/significance'],
-#                            tags=combined_bg_file.tags + ['open_box'])
+ifar_ob = wf.make_ifar_plot(workflow, combined_bg_file,
+                                    rdir['open_box_result'],
+                                    tags=combined_bg_file.tags + ['open_box'],
+                                    executable='page_ifar_catalog')
 #ifar_cb = wf.make_ifar_plot(workflow, combined_bg_file,
-#                            rdir['coincident_triggers'],
-#                            tags=combined_bg_file.tags + ['closed_box'])
+#                                    rdir['coincident_triggers'],
+#                                    tags=combined_bg_file.tags + ['closed_box'],
+#                                    executable='page_ifar_catalog')
 #table = wf.make_foreground_table(workflow, combined_bg_file,
 #                                 hdfbank[0], rdir['open_box_result'],
 #                                 singles=insps, extension='.html',
@@ -421,14 +423,14 @@ for insp_file in full_insps:
 #symlink_result(table, 'open_box_result/significance')
 
 # Set html pages
-#main_page = [(snrifar, ratehist),(table,)]
-#layout.two_column_layout(rdir['open_box_result'], main_page)
+main_page = [(ifar_ob,)]
+layout.two_column_layout(rdir['open_box_result'], main_page)
 
 #detailed_page = [(snrifar, ratehist), (snrifar_ifar, ifar_ob), (table,)]
 #layout.two_column_layout(rdir['open_box_result/significance'], detailed_page)
 
-#closed_page = [(snrifar_cb, ifar_cb), (bank_plot,)]
-#layout.two_column_layout(rdir['coincident_triggers'], closed_page)
+closed_page = [(bank_plot,)]
+layout.two_column_layout(rdir['coincident_triggers'], closed_page)
 
 # run minifollowups on the output of the loudest events
 mfup_dir = rdir['open_box_result/loudest_events_followup']
@@ -544,8 +546,8 @@ for inj_file, tag in zip(inj_files, inj_tags):
                 wf.get_ordered_ifo_list(ifocomb, ifo_ids)
 
             # Create coinc tag, and set up the coinc job for the combination
-            coinctag = '{}det_'.format(len(ifocomb)) + ordered_ifo_list
-            ctagcomb = [tag, 'injections', coinctag]
+            coinctag = '{}det'.format(len(ifocomb))
+            ctagcomb = [tag, 'injections', coinctag, ordered_ifo_list]
             curr_out = wf.setup_multiifo_interval_coinc_inj\
                 (workflow, hdfbank, full_insps, inspcomb, statfiles,
                  final_bg_files[ordered_ifo_list],
