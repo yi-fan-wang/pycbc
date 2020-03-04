@@ -194,6 +194,63 @@ eccentricity = Parameter("eccentricity",
                 description="Eccentricity.")
 
 #testing GR parameters 
+dchi0 = Parameter("dchi0",
+                dtype=float, default=0., label=r"$d\chi_0$",
+                description="0PN testingGR parameter.")
+dchi1 = Parameter("dchi1",
+                dtype=float, default=0., label=r"$d\chi_1$",
+                description="0.5PN testingGR parameter.")
+dchi2 = Parameter("dchi2",
+                dtype=float, default=0., label=r"$d\chi_2$",
+                description="1PN testingGR parameter.")
+dchi3 = Parameter("dchi3",
+                dtype=float, default=0., label=r"$d\chi_3$",
+                description="1.5PN testingGR parameter.")
+dchi4 = Parameter("dchi4",
+                dtype=float, default=0., label=r"$d\chi_4$",
+                description="2PN testingGR parameter.")
+dchi5 = Parameter("dchi5",
+                dtype=float, default=0., label=r"$d\chi_5$",
+                description="2.5PN testingGR parameter.")
+dchi5l = Parameter("dchi5l",
+                dtype=float, default=0., label=r"$d\chi_5{l}$",
+                description="2.5PN logrithm testingGR parameter.")
+dchi6 = Parameter("dchi6",
+                dtype=float, default=0., label=r"$d\chi_6$",
+                description="3PN testingGR parameter.")
+dchi6l = Parameter("dchi6l",
+                dtype=float, default=0., label=r"$d\chi_{6l}$",
+                description="3PN logrithm testingGR parameter.")
+dchi7 = Parameter("dchi7",
+                dtype=float, default=0., label=r"$d\chi_7$",
+                description="3.5PN testingGR parameter.")
+dalpha1 = Parameter("dalpha1",
+                dtype=float, default=0., label=r"$d\alpha_1$",
+                description="Merger-ringdown testingGR parameter.")
+dalpha2 = Parameter("dalpha2",
+                dtype=float, default=0., label=r"$d\alpha_2$",
+                description="Merger-ringdown testingGR parameter.")
+dalpha3 = Parameter("dalpha3",
+                dtype=float, default=0., label=r"$d\alpha_3$",
+                description="Merger-ringdown testingGR parameter.")
+dalpha4 = Parameter("dalpha4",
+                dtype=float, default=0., label=r"$d\alpha_4$",
+                description="Merger-ringdown testingGR parameter.")
+dalpha5 = Parameter("dalpha5",
+                dtype=float, default=0., label=r"$d\alpha_5$",
+                description="Merger-ringdown testingGR parameter.")
+dbeta1 = Parameter("dbeta1",
+                dtype=float, default=0., label=r"$d\beta_1$",
+                description="Merger-ringdown testingGR parameter.")
+dbeta2 = Parameter("dbeta2",
+                dtype=float, default=0., label=r"$d\beta_2$",
+                description="Merger-ringdown testingGR parameter.")
+dbeta3 = Parameter("dbeta3",
+                dtype=float, default=0., label=r"$d\beta_3$",
+                description="Merger-ringdown testingGR parameter.")
+
+
+
 parity_log10aeff = Parameter("parity_log10aeff",
                 dtype=float, default=0., label=r"$\log_{10}A_\mathrm{eff}$",
                 description="The logrithm of parity violating parameter Aeff.")
@@ -483,7 +540,7 @@ mode_array = Parameter("mode_array",
 #
 #testing GR parameters
 
-testingGR_params = ParameterList([parity_beta,parity_log10aeff,parity_aeff,parity_aeff_amp,parity_beta_amp])
+testingGR_params = ParameterList([parity_beta,parity_log10aeff,parity_aeff,parity_aeff_amp,parity_beta_amp,dchi0,dchi1,dchi2,dchi3,dchi4,dchi5,dchi5l,dchi6,dchi6l,dchi7,dalpha1,dalpha2,dalpha3,dalpha4,dalpha5,dbeta1,dbeta2,dbeta3])
 
 
 # parameters describing the location of a binary w.r.t. the Earth. Note: we
