@@ -427,12 +427,7 @@ class _HDFInjectionSet(object):
             if write_params is None:
                 write_params = samples.fieldnames
             for arg, val in static_args.items():
-                try:
-                    fp.attrs[arg] = val
-                except TypeError:
-                    # can get this in python 3 if the val was numpy.str_ type
-                    # try decoding it and writing
-                    fp.attrs[arg] = str(val)
+                fp.attrs[arg] = val
             for field in write_params:
                 fp[field] = samples[field]
 
