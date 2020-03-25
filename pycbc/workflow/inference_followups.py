@@ -38,8 +38,9 @@ def make_inference_plot(workflow, input_file, output_dir,
     ----------
     workflow: pycbc.workflow.Workflow
         The core workflow instance we are populating
-    input_file: pycbc.workflow.File
-        The file used for the input.
+    input_file: (list of) pycbc.workflow.File
+        The file used for the input. May provide either a single file or a
+        list of files.
     output_dir: str
         The directory to store result plots.
     name: str
@@ -91,7 +92,12 @@ def make_inference_plot(workflow, input_file, output_dir,
         # and put the opt back in the config file in memory
         workflow.cp.set(name, 'parameters', parameters)
     # add input and output options
-    node.add_input_opt("--{}".format(input_file_opt), input_file)
+    if isinstance(input_file, list):
+        # list of input files are given, use input_list_opt
+        node.add_input_list_opt("--{}".format(input_file_opt), input_file)
+    else:
+        # assume just a single file
+        node.add_input_opt("--{}".format(input_file_opt), input_file)
     node.new_output_file_opt(analysis_seg, output_file_extension,
                              "--output-file")
     # add node to workflow
@@ -148,10 +154,6 @@ def create_posterior_files(workflow, samples_files, output_dir,
         One or more files to extract the posterior samples from.
     output_dir: str
         The directory to store result plots and files.
-    parameters : list, optional
-        A list of the parameters to extract, and (optionally) a name for them
-        to be mapped to. This is passed to the program's ``--parameters``
-        argument.
     name: str, optional
         The name in the [executables] section of the configuration file
         to use, and the section to read for additional arguments to pass to
@@ -171,15 +173,27 @@ def create_posterior_files(workflow, samples_files, output_dir,
         analysis_seg = workflow.analysis_time
     if tags is None:
         tags = []
+    # Catch if a parameters option was specified:
+    # we need to do this because Executable will automatically add any
+    # option in the section to the node. However, we need to add the
+    # appropriate escapes to the parameters option so pegasus will render it
+    # properly (see _params_for_pegasus for details).
+    parameters = None
+    if workflow.cp.has_option(name, 'parameters'):
+        parameters = workflow.cp.get(name, 'parameters')
+        workflow.cp.remove_option(name, 'parameters')
     extract_posterior_exe = Executable(workflow.cp, name,
                                        ifos=workflow.ifos,
                                        out_dir=output_dir)
     node = extract_posterior_exe.create_node()
+    # add back the parameters option if it was specified
+    if parameters is not None:
+        node.add_opt("--parameters", _params_for_pegasus(parameters))
+        # and put the opt back in the config file in memory
+        workflow.cp.set(name, 'parameters', parameters)
     if not isinstance(samples_files, list):
         samples_files = [samples_files]
     node.add_input_list_opt("--input-file", samples_files)
-    if parameters is not None:
-        node.add_opt("--parameters", _params_for_pegasus(parameters))
     node.new_output_file_opt(analysis_seg, ".hdf", "--output-file", tags=tags)
     # add node to workflow
     workflow += node
@@ -348,7 +362,7 @@ def make_inference_posterior_plot(workflow, inference_file, output_dir,
     pycbc.workflow.FileList
         A list of output files.
     """
-    # create the node, but delay adding it to the workflo so we can add
+    # create the node, but delay adding it to the workflow so we can add
     # the prior file if it is requested
     node = make_inference_plot(workflow, inference_file, output_dir,
                                name, analysis_seg=analysis_seg, tags=tags,
@@ -430,98 +444,145 @@ def make_inference_acceptance_rate_plot(workflow, inference_file, output_dir,
     return node.output_files
 
 
-def make_inference_inj_plots(workflow, inference_files, output_dir,
-                             parameters, name="inference_recovery",
-                             analysis_seg=None, tags=None):
-    """ Sets up the recovered versus injected parameter plot in the workflow.
+def make_inference_pp_table(workflow, posterior_files, output_dir,
+                            parameters=None, injection_samples_map=None,
+                            name="pp_table_summary",
+                            analysis_seg=None, tags=None):
+    """Performs a PP, writing results to an html table.
 
     Parameters
     ----------
-    workflow: pycbc.workflow.Workflow
+    workflow : pycbc.workflow.Workflow
         The core workflow instance we are populating
-    inference_files: pycbc.workflow.FileList
-        The files with posterior samples.
-    output_dir: str
+    posterior_files : pycbc.workflow.core.FileList
+        List of files with posteriors of injections.
+    output_dir : str
         The directory to store result plots and files.
-    parameters : list
-        A ``list`` of parameters. Each parameter gets its own plot.
-    name: str
+    parameters : list or str, optional
+        A list or string of parameters to generate the table for. If a string
+        is provided, separate parameters should be space or new-line separated.
+    injection_samples_map : (list of) str, optional
+        Map between injection parameters and parameters in the posterior file.
+        Format is ``INJECTION_PARAM:SAMPLES_PARAM``.
+    name : str, optional
         The name in the [executables] section of the configuration file
-        to use.
-    analysis_segs: {None, ligo.segments.Segment}
+        to use, and the section to read for additional arguments to pass to
+        the executable. Default is ``table_summary``.
+    analysis_segs : ligo.segments.Segment, optional
        The segment this job encompasses. If None then use the total analysis
        time from the workflow.
-    tags: {None, optional}
+    tags : list, optional
         Tags to add to the inference executables.
 
     Returns
     -------
     pycbc.workflow.FileList
-        A list of result and output files.
+        A list of output files.
     """
-
-    # default values
-    tags = [] if tags is None else tags
-    analysis_seg = workflow.analysis_time \
-                       if analysis_seg is None else analysis_seg
-    output_files = FileList([])
-
-    # make the directory that will contain the output files
-    makedir(output_dir)
-
-    # add command line options
-    for (ii, param) in enumerate(parameters):
-        plot_exe = PlotExecutable(workflow.cp, name, ifos=workflow.ifos,
-                                  out_dir=output_dir,
-                                  tags=tags+['param{}'.format(ii)])
-        node = plot_exe.create_node()
-        node.add_input_list_opt("--input-file", inference_files)
-        node.new_output_file_opt(analysis_seg, ".png", "--output-file")
-        node.add_opt("--parameters", param)
-        workflow += node
-        output_files += node.output_files
-
-    return output_files
+    # we'll use make_inference_plot even though this isn't a plot; the
+    # setup is the same, we just change the file extension
+    node = make_inference_plot(workflow, posterior_files, output_dir,
+                               name, analysis_seg=analysis_seg, tags=tags,
+                               output_file_extension='.html',
+                               add_to_workflow=False)
+    # add the parameters and inj/samples map
+    if parameters is not None:
+        node.add_opt("--parameters", _params_for_pegasus(parameters))
+    if injection_samples_map is not None:
+        node.add_opt("--injection-samples-map",
+                     _params_for_pegasus(injection_samples_map))
+    workflow += node
+    return node.output_files
 
 
-def get_posterior_params(cp, section='workflow-posterior_params'):
-    """Gets the posterior parameters from the given config file.
-
-    The posterior parameters are read from the given ``section``. Parameters
-    should be specified as ``OUTPUT = [INPUT]``, where ``OUTPUT`` is what
-    the parameter should be named in the posterior file and ``INPUT`` is the
-    (function of) parameter(s) to read from the samples file. If no ``INPUT``
-    is provided, the ``INPUT`` name will assumed to be the same as the
-    ``OUTPUT``. Example:
-
-    .. code-block:: ini
-
-       [workflow-posterior_params]
-       mass1 = primary_mass(mass1, mass2)
-       mass2 = secondary_mass(mass1, mass2)
-       distance =
+def make_inference_pp_plot(workflow, posterior_files, output_dir,
+                           parameters=None, injection_samples_map=None,
+                           name="plot_pp",
+                           analysis_seg=None, tags=None):
+    """Sets up a pp plot in the workflow.
 
     Parameters
     ----------
-    cp : pycbc.workflow.configuration.WorkflowConfigParser
-        Config parser to read.
-    section : str, optional
-        The name of the section to load the parameters from. Default is
-        ``workflow-posterior_params``.
+    workflow: pycbc.workflow.Workflow
+        The core workflow instance we are populating
+    posterior_files: pycbc.workflow.core.FileList
+        List of files with posteriors of injections.
+    output_dir: str
+        The directory to store result plots and files.
+    parameters : list or str, optional
+        The parameters to plot.
+    injection_samples_map : (list of) str, optional
+        Map between injection parameters and parameters in the posterior file.
+        Format is ``INJECTION_PARAM:SAMPLES_PARAM``.
+    name: str, optional
+        The name in the [executables] section of the configuration file
+        to use, and the section to read for additional arguments to pass to
+        the executable. Default is ``plot_pp``.
+    analysis_segs: ligo.segments.Segment, optional
+       The segment this job encompasses. If None then use the total analysis
+       time from the workflow.
+    tags: list, optional
+        Tags to add to the inference executables.
 
     Returns
     -------
-    list :
-        List of strings giving ``INPUT:OUTPUT``. This can be passed as the
-        ``parameters`` argument to :py:func:`create_posterior_files`.
+    pycbc.workflow.FileList
+        A list of output files.
     """
-    params = []
-    for opt in cp.options(section):
-        val = cp.get(section, opt)
-        if val == '':
-            val = opt
-        params.append('{}:{}'.format(val, opt))
-    return params
+    node = make_inference_plot(workflow, posterior_files, output_dir,
+                               name, analysis_seg=analysis_seg, tags=tags,
+                               add_to_workflow=False)
+    # add the parameters and inj/samples map
+    if parameters is not None:
+        node.add_opt("--parameters", _params_for_pegasus(parameters))
+    if injection_samples_map is not None:
+        node.add_opt("--injection-samples-map",
+                     _params_for_pegasus(injection_samples_map))
+    # now add the node to workflow
+    workflow += node
+    return node.output_files
+
+
+def make_inference_inj_recovery_plot(workflow, posterior_files, output_dir,
+                                     parameter, injection_samples_map=None,
+                                     name="inj_recovery",
+                                     analysis_seg=None, tags=None):
+    """Sets up the recovered versus injected parameter plot in the workflow.
+
+    Parameters
+    ----------
+    workflow: pycbc.workflow.Workflow
+        The core workflow instance we are populating
+    inference_files: pycbc.workflow.core.FileList
+        List of files with posteriors of injections.
+    output_dir: str
+        The directory to store result plots and files.
+    parameter : str
+        The parameter to plot.
+    injection_samples_map : (list of) str, optional
+        Map between injection parameters and parameters in the posterior file.
+        Format is ``INJECTION_PARAM:SAMPLES_PARAM``.
+    name: str, optional
+        The name in the [executables] section of the configuration file
+        to use, and the section to read for additional arguments to pass to
+        the executable. Default is ``inj_recovery``.
+    analysis_segs: ligo.segments.Segment, optional
+       The segment this job encompasses. If None then use the total analysis
+       time from the workflow.
+    tags: list, optional
+        Tags to add to the inference executables.
+
+    Returns
+    -------
+    pycbc.workflow.FileList
+        A list of output files.
+    """
+    # arguments are the same as plot_pp, so just call that with the
+    # different executable name
+    return make_inference_pp_plot(
+        workflow, posterior_files, output_dir, parameters=parameter,
+        injection_samples_map=injection_samples_map,
+        name=name, analysis_seg=analysis_seg, tags=tags)
 
 
 def get_plot_group(cp, section_tag):
@@ -635,13 +696,16 @@ def make_posterior_workflow(workflow, samples_files, config_file, label,
                             tags=None):
     """Adds jobs to a workflow that make a posterior file and subsequent plots.
 
-    The parameters to be written to the posterior file are read from the
-    ``[workflow-posterior_params]`` section of the workflow's config file; see
-    :py:func:`get_posterior_params` for details.
+    A posterior file is first created from the given samples file(s). The
+    settings for extracting the posterior are set by the
+    ``[extract_posterior]`` section. If that section has a ``parameters``
+    argument, then the parameters in the posterior file (and for use in all
+    subsequent plotting) will be whatever that option is set to. Otherwise,
+    the parameters in the posterior file will be whatever is common to
+    all of the given samples file(s).
 
     Except for prior plots (which use the given inference config file), all
-    subsequent jobs use the posterior file, and so may use the parameters
-    provided in ``[workflow-posterior_params]``. The following are created:
+    subsequent jobs use the posterior file. The following are created:
 
     * **Summary table**: an html table created using the ``table_summary``
       executable. The parameters to print in the table are retrieved from the
@@ -721,9 +785,6 @@ def make_posterior_workflow(workflow, samples_files, config_file, label,
 
     analysis_seg = workflow.analysis_time
 
-    # get the parameters that will be used for posterior files and plots
-    posterior_params = get_posterior_params(workflow.cp)
-
     # figure out what parameters user wants to plot from workflow configuration
     # parameters for the summary plots
     summary_plot_params = get_plot_group(workflow.cp, 'summary_plots')
@@ -746,8 +807,7 @@ def make_posterior_workflow(workflow, samples_files, config_file, label,
     # make node for running extract samples
     posterior_file = create_posterior_files(
         workflow, samples_files, posterior_file_dir,
-        parameters=posterior_params, analysis_seg=analysis_seg,
-        tags=tags+[label])[0]
+        analysis_seg=analysis_seg, tags=tags+[label])[0]
 
     # summary table
     summary_files += (make_inference_summary_table(
