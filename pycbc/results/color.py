@@ -8,6 +8,9 @@ _ifo_color_map = {
     'I1': '#b0dd8b',  # light green
     'L1': '#4ba6ff',  # blue
     'V1': '#9b59b6',  # magenta/purple
+    'E1': '#222222',  # dark gray
+    'E2': '#222222',  # dark gray
+    'E3': '#222222',  # dark gray
 }
 
 _source_color_map = {
