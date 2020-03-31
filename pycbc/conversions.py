@@ -428,10 +428,11 @@ def integrand_parityaeff(redshift, parity_beta):
 
     return (1.0+redshift)**(parity_beta)/ numpy.sqrt(omega_m*(1.0+redshift)**3.0 + omega_l)
 
-def mpvinverse_from_parityaeff(parity_beta, parity_aeff, redshift):
+def mpvinverse_from_parityaeff(parity_beta, parity_aeff, distance):
     """
 
     """
+    redshift = pycbc.cosmology.redshift(distance)
     aeffval, input_is_array = ensurearray(parity_aeff)
     redshiftval, input_is_array = ensurearray(redshift)
     # make sure aeffval is atleast 1D
@@ -439,11 +440,17 @@ def mpvinverse_from_parityaeff(parity_beta, parity_aeff, redshift):
         aeffval = aeffval.reshape(1)
     if redshiftval.size == 1 and redshiftval.ndim == 0:
         redshiftval = redshiftval.reshape(1)
+
+    # make sure that aeff > 0
+    #mask = aeffval>0
+    #redshift = redshift[mask]
+    #aeffval = aeffval[mask]
+        
     zs = numpy.zeros(aeffval.shape, dtype=float)  # the output array
     for (ii, val) in enumerate(aeffval):
         zs[ii] = integrate.quad(integrand_parityaeff, 0, redshiftval[ii] ,args=(parity_beta))[0]
-    result = (parity_aeff / zs ) ** (1.0 / parity_beta)
-    return  formatreturn(result , input_is_array)
+    result = (aeffval / zs ) ** (1.0 / parity_beta) * 1.60217656535e-19
+    return  formatreturn(result , input_is_array) 
 
 #
 # =============================================================================

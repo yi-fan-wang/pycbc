@@ -1235,8 +1235,10 @@ class MpvinverseFromParityaeff(BaseTransform):
             A dict with key as parameter name and value as numpy.array or float
             of transformed values.
         """
-        #out = {parameters.parity_mpvinverse : conversions.redshift(
-        #                                            maps[parameters.parity_aeff])}
+        out = {parameters.parity_mpvinverse : conversions.mpvinverse_from_parityaeff(
+                        maps[parameters.parity_beta],
+                        maps[parameters.parity_aeff],
+                        maps[parameters.distance])}
         #return self.format_output(maps, out)
         pass
 
