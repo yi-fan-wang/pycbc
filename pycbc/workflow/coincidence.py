@@ -280,7 +280,9 @@ class PyCBCMultiifoAddStatmap(PyCBCMultiifoCombineStatmap):
             tags = []
         node = super(PyCBCMultiifoAddStatmap, self).create_node(statmap_files,
                                                             tags=tags)
-        if 'injections' in (tags+self.tags):
+        # Enforce upper case
+        ctags = [t.upper() for t in (tags + self.tags)]
+        if 'INJECTIONS' in ctags:
             node.add_input_list_opt('--background-files', background_files)
 
         return node
@@ -337,7 +339,7 @@ def merge_single_detector_hdf_files(workflow, bank_file, trigger_files, out_dir,
     return out
 
 def setup_trigger_fitting(workflow, insps, hdfbank, veto_file, veto_name,
-                          tags=None):
+                          output_dir=None, tags=None):
     if not workflow.cp.has_option('workflow-coincidence', 'do-trigger-fitting'):
         return FileList()
     else:
@@ -348,12 +350,14 @@ def setup_trigger_fitting(workflow, insps, hdfbank, veto_file, veto_name,
             ifo_insp = ifo_insp[0]
             raw_exe = PyCBCFitByTemplateExecutable(workflow.cp,
                                                    'fit_by_template', ifos=i,
+                                                   out_dir=output_dir,
                                                    tags=tags)
             raw_node = raw_exe.create_node(ifo_insp, hdfbank,
                                            veto_file, veto_name)
             workflow += raw_node
             smooth_exe = PyCBCFitOverParamExecutable(workflow.cp,
                                                      'fit_over_param', ifos=i,
+                                                     out_dir=output_dir,
                                                      tags=tags)
             smooth_node = smooth_exe.create_node(raw_node.output_file,
                                                  hdfbank)
@@ -725,7 +729,7 @@ def setup_multiifo_interval_coinc_inj(workflow, hdfbank, full_data_trig_files,
                                                    group_str,
                                                    pivot_ifo,
                                                    fixed_ifo,
-                                                   tags=[str(i)])
+                                                   tags=['JOB'+str(i)])
 
             bg_files[ctag] += coinc_node.output_files
             workflow.add_node(coinc_node)
