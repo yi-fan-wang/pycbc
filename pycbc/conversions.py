@@ -450,6 +450,7 @@ def mpvinverse_from_parityaeff(parity_beta, parity_aeff, distance):
     for (ii, val) in enumerate(aeffval):
         zs[ii] = integrate.quad(integrand_parityaeff, 0, redshiftval[ii] ,args=(parity_beta))[0]
     result = (aeffval / zs ) ** (1.0 / parity_beta) * 1.60217656535e-19
+    result = numpy.abs(result)
     return  formatreturn(result , input_is_array) 
 
 #
