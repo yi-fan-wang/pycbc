@@ -131,6 +131,8 @@ def _check_lal_pars(p):
             lalsimulation.SimInspiralModeArrayActivateMode(ma, l, m)
         lalsimulation.SimInspiralWaveformParamsInsertModeArray(lal_pars, ma)
 
+    if p['mgmass'] is not None:
+        lalsimulation.SimInspiralWaveformParamsInsertNonGRMassiveGravitonMass(lal_pars,p['mgmass'])
     if p['parity_beta'] is not None:
         lalsimulation.SimInspiralWaveformParamsInsertNonGRParitybeta(lal_pars,int(p['parity_beta']))
     if p['parity_aeff'] is not None:

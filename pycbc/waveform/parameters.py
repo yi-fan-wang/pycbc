@@ -250,6 +250,9 @@ dbeta3 = Parameter("dbeta3",
                 description="Merger-ringdown testingGR parameter.")
 
 
+mgmass = Parameter("mgmass",
+                dtype=float, default=0., label=r"$M_\mathrm{mg}~[eV]$",
+                description="The mass of the massive graviton, unit: eV")
 
 parity_log10aeff = Parameter("parity_log10aeff",
                 dtype=float, default=0., label=r"$\log_{10}A_\mathrm{eff}$",
@@ -540,7 +543,7 @@ mode_array = Parameter("mode_array",
 #
 #testing GR parameters
 
-testingGR_params = ParameterList([parity_beta,parity_log10aeff,parity_aeff,parity_aeff_amp,parity_beta_amp,dchi0,dchi1,dchi2,dchi3,dchi4,dchi5,dchi5l,dchi6,dchi6l,dchi7,dalpha1,dalpha2,dalpha3,dalpha4,dalpha5,dbeta1,dbeta2,dbeta3])
+testingGR_params = ParameterList([mgmass,parity_beta,parity_log10aeff,parity_aeff,parity_aeff_amp,parity_beta_amp,dchi0,dchi1,dchi2,dchi3,dchi4,dchi5,dchi5l,dchi6,dchi6l,dchi7,dalpha1,dalpha2,dalpha3,dalpha4,dalpha5,dbeta1,dbeta2,dbeta3])
 
 
 # parameters describing the location of a binary w.r.t. the Earth. Note: we
