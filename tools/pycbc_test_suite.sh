@@ -57,6 +57,21 @@ else
 fi
 popd
 
+# run PyCBC Live test if running in Python 3
+if [ "x$PYTHON3" = "xTRUE" ]
+then
+    pushd examples/live
+    bash -e run.sh
+    if test $? -ne 0 ; then
+        RESULT=1
+        echo -e "    FAILED!"
+        echo -e "---------------------------------------------------------"
+    else
+        echo -e "    Pass."
+    fi
+    popd
+fi
+
 # Run Inference Scripts
 ## Run inference on 2D-normal analytic likelihood function
 pushd examples/inference/analytic-normal2d
@@ -106,6 +121,19 @@ popd
 
 ## Run inference using single template model
 pushd examples/inference/single
+bash -e get.sh
+bash -e run.sh
+if test $? -ne 0 ; then
+    RESULT=1
+    echo -e "    FAILED!"
+    echo -e "---------------------------------------------------------"
+else
+    echo -e "    Pass."
+fi
+popd
+
+## Run inference using relative model
+pushd examples/inference/relative
 bash -e get.sh
 bash -e run.sh
 if test $? -ne 0 ; then
