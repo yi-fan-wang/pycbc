@@ -453,6 +453,20 @@ def mpvinverse_from_parityaeff(parity_beta, parity_aeff, distance):
     result = numpy.abs(result)
     return  formatreturn(result , input_is_array) 
 
+def MassofMassiveGravitonfromRedshifted(mass, redshift):
+    """
+
+    """
+    massval, input_is_array = ensurearray(mass)
+    redshiftval, input_is_array = ensurearray(redshift)
+    # make sure aeffval is atleast 1D
+    if massval.size == 1 and massval.ndim == 0:
+        massval = massval.reshape(1)
+    if redshiftval.size == 1 and redshiftval.ndim == 0:
+        redshiftval = redshiftval.reshape(1)
+        
+    result = mass * numpy.sqrt(1+redshift)
+    return  formatreturn(result , input_is_array) 
 #
 # =============================================================================
 #
@@ -1541,6 +1555,7 @@ __all__ = ['dquadmon_from_lambda', 'lambda_tilde',
            'tau3_from_mass1_mass2', 'mtotal_from_tau0_tau3',
            'eta_from_tau0_tau3', 'mass1_from_tau0_tau3',
            'mass2_from_tau0_tau3', 'mpvinverse_from_parityaeff', 
+           'MassofMassiveGravitonfromRedshifted',
            'primary_spin', 'secondary_spin',
            'chi_eff', 'chi_a', 'chi_p', 'phi_a', 'phi_s',
            'primary_xi', 'secondary_xi',
