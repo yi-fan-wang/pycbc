@@ -10,48 +10,112 @@ export HDF5_USE_FILE_LOCKING="FALSE"
 gps_start_time=1272790000
 gps_end_time=1272790500
 
-echo -e "\\n\\n>> [`date`] Making template bank"
 
-curl \
-    --remote-name \
-    --silent \
-    --show-error \
-    https://raw.githubusercontent.com/gwastro/pycbc-config/710dbfd3590bd93d7679d7822da59fcb6b6fac0f/O2/bank/H1L1-HYPERBANK_SEOBNRv4v2_VARFLOW_THORNE-1163174417-604800.xml.gz
 
-pycbc_coinc_bank2hdf \
-    --bank-file H1L1-HYPERBANK_SEOBNRv4v2_VARFLOW_THORNE-1163174417-604800.xml.gz \
-    --output-file template_bank_full.hdf
+# test if there is a template bank. If not, make one
 
-rm -f H1L1-HYPERBANK_SEOBNRv4v2_VARFLOW_THORNE-1163174417-604800.xml.gz
+if [[ ! -f template_bank.hdf ]]
+then
+    echo -e "\\n\\n>> [`date`] Making template bank"
+    curl \
+        --remote-name \
+        --silent \
+        --show-error \
+        https://raw.githubusercontent.com/gwastro/pycbc-config/710dbfd3590bd93d7679d7822da59fcb6b6fac0f/O2/bank/H1L1-HYPERBANK_SEOBNRv4v2_VARFLOW_THORNE-1163174417-604800.xml.gz
 
-pycbc_hdf5_splitbank \
-    --bank-file template_bank_full.hdf \
-    --output-prefix template_bank_ \
-    --random-sort \
-    --templates-per-bank 1000
+    pycbc_coinc_bank2hdf \
+        --bank-file H1L1-HYPERBANK_SEOBNRv4v2_VARFLOW_THORNE-1163174417-604800.xml.gz \
+        --output-file template_bank_full.hdf
 
-mv template_bank_0.hdf template_bank.hdf
-rm -f template_bank_*.hdf
+    rm -f H1L1-HYPERBANK_SEOBNRv4v2_VARFLOW_THORNE-1163174417-604800.xml.gz
 
-echo -e "\\n\\n>> [`date`] Generating simulated strain"
+    pycbc_hdf5_splitbank \
+        --bank-file template_bank_full.hdf \
+        --output-prefix template_bank_ \
+        --random-sort \
+        --random-seed 831486 \
+        --templates-per-bank 50
 
-function simulate_strain { # detector PSD_model random_seed
-    mkdir -p strain/$1
-    pycbc_condition_strain \
-        --fake-strain $2 \
-        --fake-strain-seed $3 \
-        --output-strain-file "strain/$1/$1-SIMULATED_STRAIN-{start}-{duration}.gwf" \
-        --gps-start-time $gps_start_time \
-        --gps-end-time $gps_end_time \
-        --sample-rate 16384 \
-        --low-frequency-cutoff 10 \
-        --channel-name $1:SIMULATED_STRAIN \
-        --frame-duration 32
-}
+    mv template_bank_0.hdf template_bank.hdf
+    rm -f template_bank_*.hdf
+else echo -e "\\n\\n>> [`date`] Pre-existing template bank found"
+fi
 
-simulate_strain H1 aLIGOMidLowSensitivityP1200087 1234
-simulate_strain L1 aLIGOMidLowSensitivityP1200087 2345
-simulate_strain V1 AdVEarlyLowSensitivityP1200087 3456
+
+# test if there is a inj file. If not, make one.
+# if a new inj is made, delete old strain
+
+if [[ -f test_inj1.hdf && -f test_inj2.hdf ]]
+then
+    echo -e "\\n\\n>> [`date`] Pre-existing Injection Found"
+else echo -e "\\n\\n>> [`date`] Generating injection"
+
+    if [[ -f test_inj1.hdf ]]
+    then rm test_inj1.hdf
+    fi
+    
+    if [[ -f test_inj2.hdf ]]
+    then rm test_inj2.hdf
+    fi
+    
+    if [[ -d ./strain ]]
+    then rm -r ./strain
+    fi
+    
+     ./generate_injections.py
+fi
+
+
+
+# test if strain files exist. If they dont, make them
+
+if [[ ! -d ./strain ]]
+then        
+    echo -e "\\n\\n>> [`date`] Generating simulated strain"
+    
+    function simulate_strain { # detector PSD_model random_seed
+        mkdir -p temp_strain/$1
+        mkdir -p strain/$1
+        
+        (( t1=$gps_start_time-10 ))
+        (( t2=$gps_end_time+10 ))
+        
+        pycbc_condition_strain \
+            --fake-strain $2 \
+            --fake-strain-seed $3 \
+            --output-strain-file "temp_strain/$1/$1-TEMP-{start}-{duration}.gwf" \
+            --gps-start-time $t1 \
+            --gps-end-time $t2 \
+            --sample-rate 16384 \
+            --low-frequency-cutoff 10 \
+            --channel-name $1:SIMULATED_STRAIN \
+            --frame-duration 32 \
+            --injection-file 'test_inj1.hdf'
+            
+        pycbc_condition_strain \
+            --frame-files temp_strain/$1/* \
+            --output-strain-file "strain/$1/$1-SIMULATED_STRAIN-{start}-{duration}.gwf" \
+            --gps-start-time $gps_start_time  \
+            --gps-end-time $gps_end_time \
+            --sample-rate 16384 \
+            --low-frequency-cutoff 10 \
+            --channel-name $1:SIMULATED_STRAIN \
+            --frame-duration 32 \
+            --injection-file 'test_inj2.hdf'
+
+    }
+    simulate_strain H1 aLIGOMidLowSensitivityP1200087 1234
+    simulate_strain L1 aLIGOMidLowSensitivityP1200087 2345
+    simulate_strain V1 AdVEarlyLowSensitivityP1200087 3456
+else echo -e "\\n\\n>> [`date`] Pre-existing strain data found"
+fi
+
+
+# delete old outputs if they exist
+if [[ -d ./output ]]
+then rm -r ./output
+fi
+
 
 echo -e "\\n\\n>> [`date`] Running PyCBC Live"
 
@@ -121,6 +185,8 @@ python -m mpi4py `which pycbc_live` \
 --ifar-double-followup-threshold 0.0001 \
 --ifar-upload-threshold 0.0001 \
 --round-start-time 4 \
---size-override 20 \
 --start-time $gps_start_time \
 --end-time $gps_end_time
+
+echo -e "\\n\\n>> [`date`] Checking results"
+./check_results.py

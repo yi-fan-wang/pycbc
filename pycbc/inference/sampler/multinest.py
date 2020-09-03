@@ -236,12 +236,10 @@ class MultinestSampler(BaseSampler):
         """Transforms the unit hypercube that multinest makes its draws
         from, into the prior space defined in the config file.
         """
-        prior_dists = self.model.prior_distribution.distributions
-        dist_dict = {}
-        for dist in prior_dists:
-            dist_dict.update({param: dist for param in dist.params})
+        dict_cube = dict(zip(self.model.variable_params, cube))
+        inv = self.model.prior_distribution.cdfinv(**dict_cube)
         for i, param in enumerate(self.model.variable_params):
-            cube[i] = dist_dict[param].cdfinv(param, cube[i])
+            cube[i] = inv[param]
         return cube
 
     def run(self):
@@ -329,7 +327,7 @@ class MultinestSampler(BaseSampler):
                 f_p.write_niterations(self.niterations)
         logging.info("Validating checkpoint and backup files")
         checkpoint_valid = validate_checkpoint_files(
-            self.checkpoint_file, self.backup_file)
+            self.checkpoint_file, self.backup_file, check_nsamples=False)
         if not checkpoint_valid:
             raise IOError("error writing to checkpoint file")
 

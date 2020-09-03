@@ -29,14 +29,11 @@ from __future__ import absolute_import
 
 import sys
 import logging
-import pickle
-from io import BytesIO
-from abc import (ABCMeta, abstractmethod)
 
+from abc import (ABCMeta, abstractmethod)
 from six import (add_metaclass, string_types)
 
 import numpy
-
 import h5py
 
 from pycbc.io import FieldArray
@@ -350,69 +347,25 @@ class BaseInferenceFile(h5py.File):
     def thin_start(self):
         """The default start index to use when reading samples.
 
-        This tries to read from ``thin_start`` in the ``attrs``. If it isn't
-        there, just returns 0."""
-        try:
-            return self.attrs['thin_start']
-        except KeyError:
-            return 0
-
-    @thin_start.setter
-    def thin_start(self, thin_start):
-        """Sets the thin start attribute.
-
-        Parameters
-        ----------
-        thin_start : int or None
-            Value to set the thin start to.
+        Unless overridden by sub-class attribute, just returns 0.
         """
-        self.attrs['thin_start'] = thin_start
+        return 0
 
     @property
     def thin_interval(self):
         """The default interval to use when reading samples.
 
-        This tries to read from ``thin_interval`` in the ``attrs``. If it
-        isn't there, just returns 1.
+        Unless overridden by sub-class attribute, just returns 1.
         """
-        try:
-            return self.attrs['thin_interval']
-        except KeyError:
-            return 1
-
-    @thin_interval.setter
-    def thin_interval(self, thin_interval):
-        """Sets the thin start attribute.
-
-        Parameters
-        ----------
-        thin_interval : int or None
-            Value to set the thin interval to.
-        """
-        self.attrs['thin_interval'] = thin_interval
+        return 1
 
     @property
     def thin_end(self):
         """The defaut end index to use when reading samples.
 
-        This tries to read from ``thin_end`` in the ``attrs``. If it isn't
-        there, just returns None.
+        Unless overriden by sub-class attribute, just return ``None``.
         """
-        try:
-            return self.attrs['thin_end']
-        except KeyError:
-            return None
-
-    @thin_end.setter
-    def thin_end(self, thin_end):
-        """Sets the thin end attribute.
-
-        Parameters
-        ----------
-        thin_end : int or None
-            Value to set the thin end to.
-        """
-        self.attrs['thin_end'] = thin_end
+        return None
 
     @property
     def cmd(self):
@@ -618,37 +571,29 @@ class BaseInferenceFile(h5py.File):
             previous = []
         self.attrs["cmd"] = cmd + previous
 
-    def get_slice(self, thin_start=None, thin_interval=None, thin_end=None):
-        """Formats a slice using the given arguments that can be used to
-        retrieve a thinned array from an InferenceFile.
+    @staticmethod
+    def get_slice(thin_start=None, thin_interval=None, thin_end=None):
+        """Formats a slice to retrieve a thinned array from an HDF file.
 
         Parameters
         ----------
-        thin_start : int, optional
-            The starting index to use. If None, will use the ``thin_start``
-            attribute.
-        thin_interval : int, optional
-            The interval to use. If None, will use the ``thin_interval``
-            attribute.
-        thin_end : int, optional
-            The end index to use. If None, will use the ``thin_end`` attribute.
+        thin_start : float or int, optional
+            The starting index to use. If provided, the ``int`` will be taken.
+        thin_interval : float or int, optional
+            The interval to use. If provided the ceiling of it will be taken.
+        thin_end : float or int, optional
+            The end index to use. If provided, the ``int`` will be taken.
 
         Returns
         -------
         slice :
             The slice needed.
         """
-        if thin_start is None:
-            thin_start = int(self.thin_start)
-        else:
+        if thin_start is not None:
             thin_start = int(thin_start)
-        if thin_interval is None:
-            thin_interval = self.thin_interval
-        else:
+        if thin_interval is not None:
             thin_interval = int(numpy.ceil(thin_interval))
-        if thin_end is None:
-            thin_end = self.thin_end
-        else:
+        if thin_end is not None:
             thin_end = int(thin_end)
         return slice(thin_start, thin_end, thin_interval)
 
@@ -716,6 +661,8 @@ class BaseInferenceFile(h5py.File):
         # if list of desired parameters is different, rename
         if set(parameters) != set(self.variable_params):
             other.attrs['variable_params'] = parameters
+        if read_args is None:
+            read_args = {}
         samples = self.read_samples(parameters, **read_args)
         logging.info("Copying {} samples".format(samples.size))
         # if different parameter names are desired, get them from the samples
@@ -726,7 +673,10 @@ class BaseInferenceFile(h5py.File):
             samples = FieldArray.from_kwargs(**arrs)
             other.attrs['variable_params'] = samples.fieldnames
         logging.info("Writing samples")
-        other.write_samples(other, samples, **write_args)
+        if write_args is None:
+            write_args = {}
+        other.write_samples({p: samples[p] for p in samples.fieldnames},
+                            **write_args)
 
     def copy(self, other, ignore=None, parameters=None, parameter_names=None,
              read_args=None, write_args=None):
@@ -815,93 +765,74 @@ class BaseInferenceFile(h5py.File):
             else:
                 attrs[arg] = val
 
+    def write_data(self, name, data, path=None, append=False):
+        """Convenience function to write data.
 
-#
-# =============================================================================
-#
-#                          Checkpointing utilities
-#
-# =============================================================================
-#
+        Given ``data`` is written as a dataset with ``name`` in ``path``.
+        If the dataset or path do not exist yet, the dataset and path will
+        be created.
 
-
-def dump_state(state, fp, path=None, dsetname='sampler_state', protocol=None):
-    """Dumps the given state to an hdf5 file handler.
-
-    The state is stored as a raw binary array to ``{path}/{dsetname}`` in the
-    given hdf5 file handler. If a dataset with the same name and path is
-    already in the file, the dataset will be resized and overwritten with the
-    new state data.
-
-    Parameters
-    ----------
-    state : any picklable object
-        The sampler state to dump to file. Can be the object returned by
-        any of the samplers' `.state` attribute (a dictionary of dictionaries),
-        or any picklable object.
-    fp : h5py.File
-        An open hdf5 file handler. Must have write capability enabled.
-    path : str, optional
-        The path (group name) to store the state dataset to. Default (None)
-        will result in the array being stored to the top level.
-    dsetname : str, optional
-        The name of the dataset to store the binary array to. Default is
-        ``sampler_state``.
-    protocol : int, optional
-        The protocol version to use for pickling. See the :py:mod:`pickle`
-        module for more details.
-    """
-    memfp = BytesIO()
-    pickle.dump(state, memfp, protocol=protocol)
-    dump_pickle_to_hdf(memfp, fp, path=path, dsetname=dsetname)
-
-
-def dump_pickle_to_hdf(memfp, fp, path=None, dsetname='sampler_state'):
-    """Dumps pickled data to an hdf5 file object.
-
-    Parameters
-    ----------
-    memfp : file object
-        Bytes stream of pickled data.
-    fp : h5py.File
-        An open hdf5 file handler. Must have write capability enabled.
-    path : str, optional
-        The path (group name) to store the state dataset to. Default (None)
-        will result in the array being stored to the top level.
-    dsetname : str, optional
-        The name of the dataset to store the binary array to. Default is
-        ``sampler_state``.
-    """
-    memfp.seek(0)
-    bdata = numpy.frombuffer(memfp.read(), dtype='S1')
-    if path is not None:
-        fp = fp[path]
-    if dsetname not in fp:
-        fp.create_dataset(dsetname, shape=bdata.shape, maxshape=(None,),
-                          dtype=bdata.dtype)
-    elif bdata.size != fp[dsetname].shape[0]:
-        fp[dsetname].resize((bdata.size,))
-    fp[dsetname][:] = bdata
-
-
-def load_state(fp, path=None, dsetname='sampler_state'):
-    """Loads a sampler state from the given hdf5 file object.
-
-    The sampler state is expected to be stored as a raw bytes array which can
-    be loaded by pickle.
-
-    Parameters
-    ----------
-    fp : h5py.File
-        An open hdf5 file handler.
-    path : str, optional
-        The path (group name) that the state data is stored to. Default (None)
-        is to read from the top level.
-    dsetname : str, optional
-        The name of the dataset that the state data is stored to. Default is
-        ``sampler_state``.
-    """
-    if path is not None:
-        fp = fp[path]
-    bdata = fp[dsetname][()].tobytes()
-    return pickle.load(BytesIO(bdata))
+        Parameters
+        ----------
+        name : str
+            The name to associate with the data. This will be the dataset
+            name (if data is array-like) or the key in the attrs.
+        data : array, dict, or atomic
+            The data to write. If a dictionary, a subgroup will be created
+            for each key, and the values written there. This will be done
+            recursively until an array or atomic (e.g., float, int, str), is
+            found. Otherwise, the data is written to the given name.
+        path : str, optional
+            Write to the given path. Default (None) will write to the top
+            level. If the path does not exist in the file, it will be
+            created.
+        append : bool, optional
+            Append the data to what is currently in the file if ``path/name``
+            already exists in the file, and if it does not, create the dataset
+            so that its last dimension can be resized. The data can only
+            be appended along the last dimension, and if it already exists in
+            the data, it must be resizable along this dimension. If ``False``
+            (the default) what is in the file will be overwritten, and the
+            given data must have the same shape.
+        """
+        if path is None:
+            path = '/'
+        try:
+            group = self[path]
+        except KeyError:
+            # create the group
+            self.create_group(path)
+            group = self[path]
+        if isinstance(data, dict):
+            # call myself for each key, value pair in the dictionary
+            for key, val in data.items():
+                self.write_data(key, val, path='/'.join([path, name]),
+                                append=append)
+        # if appending, we need to resize the data on disk, or, if it doesn't
+        # exist yet, create a dataset that is resizable along the last
+        # dimension
+        elif append:
+            # cast the data to an array if it isn't already one
+            if isinstance(data, (list, tuple)):
+                data = numpy.array(data)
+            if not isinstance(data, numpy.ndarray):
+                data = numpy.array([data])
+            dshape = data.shape
+            ndata = dshape[-1]
+            try:
+                startidx = group[name].shape[-1]
+                group[name].resize(dshape[-1]+group[name].shape[-1],
+                                   axis=len(group[name].shape)-1)
+            except KeyError:
+                # dataset doesn't exist yet
+                group.create_dataset(name, dshape,
+                                     maxshape=tuple(list(dshape)[:-1]+[None]),
+                                     dtype=data.dtype, fletcher32=True)
+                startidx = 0
+            group[name][..., startidx:startidx+ndata] = data[..., :]
+        else:
+            try:
+                group[name][()] = data
+            except KeyError:
+                # dataset doesn't exist yet
+                group[name] = data

@@ -33,6 +33,8 @@ from pycbc.distributions.uniform_log import UniformLog10
 from pycbc.distributions.spins import IndependentChiPChiEff
 from pycbc.distributions.qnm import UniformF0Tau
 from pycbc.distributions.joint import JointDistribution
+from pycbc.distributions.external import External
+from pycbc.distributions.fixedsamples import FixedSamples
 
 # a dict of all available distributions
 distribs = {
@@ -50,6 +52,8 @@ distribs = {
     UniformSky.name : UniformSky,
     UniformLog10.name : UniformLog10,
     UniformF0Tau.name : UniformF0Tau,
+    External.name: External,
+    FixedSamples.name: FixedSamples
 }
 
 def read_distributions_from_config(cp, section="prior"):

@@ -290,8 +290,24 @@ mtotal = Parameter("mtotal",
                 dtype=float, label=r"$M~(\mathrm{M}_\odot)$",
                 description="The total mass of the binary (in solar masses).")
 q = Parameter("q",
-                dtype=float, label=r"$q$",
-                description="The mass ratio, m1/m2, where m1 >= m2.")
+              dtype=float, label=r"$q$",
+              description="The mass ratio, m1/m2, where m1 >= m2.")
+srcmass1 = Parameter("srcmass1", dtype=float,
+                     label=r"$m_1^{\rm{src}}~(\mathrm{M}_\odot)$",
+                     description="The mass of the first component object in "
+                                 "the source frame (in solar masses).")
+srcmass2 = Parameter("srcmass1", dtype=float,
+                     label=r"$m_2^{\rm{src}}~(\mathrm{M}_\odot)$",
+                     description="The mass of the second component object in "
+                                 "the source frame (in solar masses).")
+srcmchirp = Parameter("srcmchirp", dtype=float,
+                      label=r"$\mathcal{M}^{\rm{src}}~(\mathrm{M}_\odot)$",
+                      description="The chirp mass of the binary in the "
+                                  "source frame (in solar masses).")
+srcmtotal = Parameter("mtotal", dtype=float,
+                      label=r"$M^{\rm{src}}~(\mathrm{M}_\odot)$",
+                      description="The total mass of the binary in the "
+                                  "source frame (in solar masses).")
 primary_mass = Parameter("primary_mass",
                 dtype=float, label=r"$m_{1}$",
                 description="Mass of the primary object (in solar masses).")
@@ -478,6 +494,9 @@ mean_per_ano = Parameter("mean_per_ano",
 tc = Parameter("tc",
                 dtype=float, default=None, label=r"$t_c$ (s)",
                 description="Coalescence time (s).")
+delta_tc = Parameter("delta_tc", dtype=float,
+                     label=r"$\Delta t_c~(\rm{s})$",
+                     description="Coalesence time offset.")
 ra = Parameter("ra",
                 dtype=float, default=None, label=r"$\alpha$",
                 description="Right ascension (rad).")
@@ -490,6 +509,9 @@ polarization = Parameter("polarization",
 redshift = Parameter("redshift",
                 dtype=float, default=None, label=r"$z$",
                 description="Redshift.")
+comoving_volume = Parameter("comoving_volume", dtype=float,
+                            label=r"$V_C~(\rm{Mpc}^3)$",
+                            description="Comoving volume (in cubic Mpc).")
 
 #
 #   Calibration parameters
@@ -605,6 +627,10 @@ td_waveform_params = cbc_rframe_params + ParameterList([delta_t]) + \
 # defined above. Defaults of None simply mean that the value is not passed into
 # the lal_dict structure and the waveform generator will take whatever default
 # behaviour
+td_required = ParameterList([f_lower, delta_t, approximant])
+fd_required = ParameterList([f_lower, delta_f, approximant])
+
+####
 cbc_td_required = ParameterList([mass1, mass2, f_lower, delta_t, approximant])
 cbc_fd_required = ParameterList([mass1, mass2, f_lower, delta_f, approximant])
 

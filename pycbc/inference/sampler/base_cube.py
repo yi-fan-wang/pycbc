@@ -38,21 +38,16 @@ def call_global_logprior(cube):
     return models._global_instance.prior_transform(cube)
 
 
-def setup_calls(model, nprocesses=1,
-                loglikelihood_function=None, copy_prior=False):
+def setup_calls(model, loglikelihood_function=None, copy_prior=False):
     """ Configure calls for MPI support
     """
     model_call = CubeModel(model, loglikelihood_function,
                            copy_prior=copy_prior)
-    if nprocesses > 1:
-        # these are used to help paralleize over multiple cores / MPI
-        models._global_instance = model_call
-        log_likelihood_call = call_global_loglikelihood
-        prior_call = call_global_logprior
-    else:
-        prior_call = model_call.prior_transform
-        log_likelihood_call = model_call.log_likelihood
 
+    # these are used to help paralleize over multiple cores / MPI
+    models._global_instance = model_call
+    log_likelihood_call = call_global_loglikelihood
+    prior_call = call_global_logprior
     return log_likelihood_call, prior_call
 
 
@@ -92,10 +87,10 @@ class CubeModel(object):
         """
         if self.copy_prior:
             cube = cube.copy()
-        prior_dists = self.model.prior_distribution.distributions
-        dist_dict = {}
-        for dist in prior_dists:
-            dist_dict.update({param: dist for param in dist.params})
+
+        # we preserve the type of cube to whatever we were given
+        dict_cube = dict(zip(self.model.variable_params, cube))
+        inv = self.model.prior_distribution.cdfinv(**dict_cube)
         for i, param in enumerate(self.model.variable_params):
-            cube[i] = dist_dict[param].cdfinv(param, cube[i])
+            cube[i] = inv[param]
         return cube

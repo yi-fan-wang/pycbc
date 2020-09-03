@@ -20,6 +20,7 @@ This modules contains functions for reading in data from frame files or caches
 import lalframe, logging
 import lal
 import numpy
+import math
 import os.path, glob, time
 import gwdatafind
 from six.moves.urllib.parse import urlparse
@@ -191,6 +192,12 @@ def read_frame(location, channels, start_time=None,
     if sieve:
         logging.info("Using frames that match regexp: %s", sieve)
         lal.CacheSieve(cum_cache, 0, 0, None, None, sieve)
+    if start_time is not None and end_time is not None:
+        # Before sieving, check if this is sane. Otherwise it will fail later.
+        if (int(math.ceil(end_time)) - int(start_time)) <= 0:
+            raise ValueError("Negative or null duration")
+        lal.CacheSieve(cum_cache, int(start_time), int(math.ceil(end_time)),
+                       None, None, None)
 
     stream = lalframe.FrStreamCacheOpen(cum_cache)
     stream.mode = lalframe.FR_STREAM_VERBOSE_MODE
@@ -334,6 +341,13 @@ def query_and_read_frame(frame_type, channels, start_time, end_time,
     """
     # Allows compatibility with our standard tools
     # We may want to place this into a higher level frame getting tool
+    if frame_type == 'LOSC_STRAIN':
+        from pycbc.frame.losc import read_strain_losc
+        if not isinstance(channels, list):
+            channels = [channels]
+        data = [read_strain_losc(c[:2], start_time, end_time)
+                for c in channels]
+        return data if len(data) > 1 else data[0]
     if frame_type == 'LOSC':
         from pycbc.frame.losc import read_frame_losc
         return read_frame_losc(channels, start_time, end_time)

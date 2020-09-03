@@ -224,7 +224,7 @@ else:
         # Create coinc tag
         coinctag = '{}det'.format(len(ifocomb))
         ctagcomb = ['full_data', coinctag]
-        other_ifo_keys = no_fg_exc_files.keys()
+        other_ifo_keys = list(no_fg_exc_files.keys())
         other_ifo_keys.remove(ordered_ifo_list)
         other_bg_files = {ctype: no_fg_exc_files[ctype]
                           for ctype in other_ifo_keys}
@@ -425,6 +425,13 @@ table = wf.make_foreground_table(workflow, combined_bg_file,
                                  hdfbank, rdir['open_box_result'],
                                  singles=insps, extension='.html',
                                  tags=combined_bg_file.tags)
+
+fore_xmlall = wf.make_foreground_table(workflow, combined_bg_file,
+                    hdfbank, rdir['open_box_result'], singles=insps,
+                    extension='.xml', tags=["xmlall"])
+fore_xmlloudest = wf.make_foreground_table(workflow, combined_bg_file,
+                    hdfbank, rdir['open_box_result'], singles=insps,
+                    extension='.xml', tags=["xmlloudest"])
 
 #symlink_result(snrifar, 'open_box_result/significance')
 #symlink_result(ratehist, 'open_box_result/significance')

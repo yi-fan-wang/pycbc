@@ -30,6 +30,7 @@ import h5py as _h5py
 from pycbc.io.record import (FieldArray, _numpy_function_lib)
 from pycbc import waveform as _waveform
 from pycbc import conversions as _conversions
+from pycbc.io.hdf import (dump_state, load_state)
 
 from pycbc.inference.option_utils import (ParseLabelArg, ParseParametersArg)
 from .emcee import EmceeFile
@@ -40,8 +41,6 @@ from .dynesty import DynestyFile
 from .ultranest import UltranestFile
 from .posterior import PosteriorFile
 from .txt import InferenceTXTFile
-# add the dump/load state functions to the io namespace
-from .base_hdf import (load_state, dump_state)
 
 filetypes = {
     EmceeFile.name: EmceeFile,
@@ -178,17 +177,18 @@ def check_integrity(filename):
             ref_shape = fp[group.format(parameters[0])].shape
             if not all(fp[group.format(param)].shape == ref_shape
                        for param in parameters):
-                raise IOError("not all datasets in the samples group have the "
-                              "same shape")
+                raise IOError("not all datasets in the samples group have "
+                              "the same shape")
             # check that we can read the first/last sample
             firstidx = tuple([0]*len(ref_shape))
             lastidx = tuple([-1]*len(ref_shape))
-            for param in parameters:
-                _ = fp[group.format(param)][firstidx]
-                _ = fp[group.format(param)][lastidx]
+        for param in parameters:
+            _ = fp[group.format(param)][firstidx]
+            _ = fp[group.format(param)][lastidx]
 
 
-def validate_checkpoint_files(checkpoint_file, backup_file):
+def validate_checkpoint_files(checkpoint_file, backup_file,
+                              check_nsamples=True):
     """Checks if the given checkpoint and/or backup files are valid.
 
     The checkpoint file is considered valid if:
@@ -225,12 +225,14 @@ def validate_checkpoint_files(checkpoint_file, backup_file):
         checkpoint_valid = True
     except (ValueError, KeyError, IOError):
         checkpoint_valid = False
+
     # backup file
     try:
         check_integrity(backup_file)
         backup_valid = True
     except (ValueError, KeyError, IOError):
         backup_valid = False
+
     # since we can open the file, run self diagnostics
     if checkpoint_valid:
         with loadfile(checkpoint_file, 'r') as fp:
@@ -238,17 +240,19 @@ def validate_checkpoint_files(checkpoint_file, backup_file):
     if backup_valid:
         with loadfile(backup_file, 'r') as fp:
             backup_valid = fp.validate()
-    # check that the checkpoint and backup have the same number of samples;
-    # if not, assume the checkpoint has the correct number
-    if checkpoint_valid and backup_valid:
-        with loadfile(checkpoint_file, 'r') as fp:
-            group = list(fp[fp.samples_group].keys())[0]
-            nsamples = fp[fp.samples_group][group].size
-        with loadfile(backup_file, 'r') as fp:
-            group = list(fp[fp.samples_group].keys())[0]
-            backup_nsamples = fp[fp.samples_group][group].size
-        backup_valid = nsamples == backup_nsamples
-    # decide what to do based on the files' statuses
+    if check_nsamples:
+        # This check is not required by nested samplers
+        # check that the checkpoint and backup have the same number of samples;
+        # if not, assume the checkpoint has the correct number
+        if checkpoint_valid and backup_valid:
+            with loadfile(checkpoint_file, 'r') as fp:
+                group = list(fp[fp.samples_group].keys())[0]
+                nsamples = fp[fp.samples_group][group].size
+            with loadfile(backup_file, 'r') as fp:
+                group = list(fp[fp.samples_group].keys())[0]
+                backup_nsamples = fp[fp.samples_group][group].size
+            backup_valid = nsamples == backup_nsamples
+        # decide what to do based on the files' statuses
     if checkpoint_valid and not backup_valid:
         # copy the checkpoint to the backup
         logging.info("Backup invalid; copying checkpoint file")
@@ -683,7 +687,7 @@ def results_from_cli(opts, load_samples=True, **kwargs):
                 # this means no file, only one constraint, apply to all
                 # files
                 constraints = {fn: constraint for fn in input_files}
-                
+
     # loop over all input files
     for input_file in input_files:
         logging.info("Reading input file %s", input_file)
@@ -706,7 +710,7 @@ def results_from_cli(opts, load_samples=True, **kwargs):
             if input_file in constraints:
                 logging.info("Applying constraints")
                 mask = samples[constraints[input_file]]
-                samples = samples[mask] 
+                samples = samples[mask]
                 if samples.size == 0:
                     raise ValueError("No samples remain after constraint {} "
                                      "applied".format(constraints[input_file]))
