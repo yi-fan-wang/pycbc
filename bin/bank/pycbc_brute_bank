@@ -31,6 +31,7 @@ parser.add_argument('--permissive', action='store_true',
     help='Allow waveform generator to fail.')
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--tolerance', type=float)
+parser.add_argument('--min-mtotal', type=float)
 parser.add_argument('--max-mtotal', type=float)
 parser.add_argument('--min-mchirp', type=float)
 parser.add_argument('--max-mchirp', type=float)
@@ -305,6 +306,9 @@ def draw(rtype):
     if args.max_q:
         q =  numpy.maximum(params['mass1'] / params['mass2'], params['mass2'] / params['mass1'])
         l &= q < args.max_q
+
+    if args.min_mtotal:
+        l &= params['mass1'] + params['mass2'] > args.min_mtotal
 
     if args.max_mtotal:
         l &= params['mass1'] + params['mass2'] < args.max_mtotal
