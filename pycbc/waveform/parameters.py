@@ -532,6 +532,10 @@ dbeta2 = Parameter("dbeta2",
 dbeta3 = Parameter("dbeta3",
                 dtype=float, default=0., label=r"$d\beta_3$",
                 description="Intermediate testingGR parameter.")
+parity_amu = Parameter("parity_Amu",
+                dtype=float, default=0, label=r"$A_\mu$",
+                description="The Amu parameter of the parity violating \
+		dispersion relation, see  2002.05668 for details")
 #
 # =============================================================================
 #
