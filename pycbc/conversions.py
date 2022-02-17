@@ -1312,6 +1312,19 @@ def final_spin_from_initial(mass1, mass2, spin1x=0., spin1y=0., spin1z=0.,
                                   f_ref=f_ref)[1]
 
 
+def ratio_a330(q):
+    a0 = 0.439698
+    a1 = -0.611581
+    a2 = 0.199865
+    a3 = -0.0279826
+    return a0 + a1/q + a2/q**2 + a3/q**3
+
+def delta_phi330(q):
+    b0 = 2.66306
+    b1 = -6.81421
+    b2 = 6.65011
+    return b0 - b1/(b2+q**2)
+
 #
 # =============================================================================
 #
@@ -1543,5 +1556,6 @@ __all__ = ['dquadmon_from_lambda', 'lambda_tilde',
            'optimal_dec_from_detector', 'optimal_ra_from_detector',
            'chi_eff_from_spherical', 'chi_p_from_spherical',
            'nltides_gw_phase_diff_isco', 'spin_from_pulsar_freq',
-           'freqlmn_from_other_lmn', 'taulmn_from_other_lmn'
+           'freqlmn_from_other_lmn', 'taulmn_from_other_lmn',
+           'ratio_a330', 'delta_phi330'
           ]
