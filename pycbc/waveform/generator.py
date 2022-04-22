@@ -44,6 +44,8 @@ from pycbc.pool import use_mpi
 import lal as _lal
 from pycbc import strain
 
+from pycbc import cosmology
+from scipy import integrate
 
 # utility functions/class
 failed_counter = 0
@@ -565,6 +567,16 @@ class BaseFDomainDetFrameGenerator(metaclass=ABCMeta):
         pass
 
 
+def integrand_parityamu_mpvinverse(redshift):
+    """
+    The integrand:
+    (1.0 + z)^parity_beta / sqrt(Omega_m (1+z)^3 + Omega_Lambda)
+    """
+    omega_m = 0.3075 #pycbc.cosmology.get_cosmology().Om0 # matter density
+    omega_l = 0.6910098821161554 #pycbc.cosmology.get_cosmology().Ode0 # dark energy density
+
+    return (1.0+redshift)/ numpy.sqrt(omega_m*(1.0+redshift)**3.0 + omega_l)
+
 
 class FDomainDetFrameGenerator(BaseFDomainDetFrameGenerator):
     """Generates frequency-domain waveform in a specific frame.
@@ -663,6 +675,20 @@ class FDomainDetFrameGenerator(BaseFDomainDetFrameGenerator):
             df = self.current_params['delta_f']
             hp = hp.to_frequencyseries(delta_f=df)
             hc = hc.to_frequencyseries(delta_f=df)
+
+            if rfparams['approximant']=='mpvnosmall':
+                zz = cosmology.redshift(rfparams['distance'])
+                intz = integrate.quad(integrand_parityamu_mpvinverse, 0, zz)[0]
+                temp =  rfparams['parity_mpvinverse'] * intz / 1e9 / _lal.QE_SI * \
+                        (_lal.H_SI / 2 / _lal.PI) * _lal.PI * _lal.PI / _lal.H0_SI
+                expminus = numpy.exp(-1j*temp*hp.sample_frequencies**2)
+                expplus = 1/expminus
+
+                hp_parity = (hp+1j*hc)*expminus/2 + (hp-1j*hc)*expplus/2
+                hc_parity = (hp+1j*hc)*expminus/2j - (hp-1j*hc)*expplus/2j
+
+                hp = hp_parity.copy()
+                hc = hc_parity.copy()
             # time-domain waveforms will not be shifted so that the peak amp
             # happens at the end of the time series (as they are for f-domain),
             # so we add an additional shift to account for it
