@@ -894,6 +894,13 @@ def imrphenomhm_length_in_time(**kwargs):
     # The relevant lower order approximant here is IMRPhenomD
     return get_hm_length_in_time("IMRPhenomD", 4, **kwargs)
 
+def imrphenomhm_l5_length_in_time(**kwargs):
+    """Estimates the duration of IMRPhenom waveforms that include higher modes.
+    """
+    # Default maximum node number for IMRPhenomHM is 4
+    # The relevant lower order approximant here is IMRPhenomD
+    return get_hm_length_in_time("IMRPhenomD", 5, **kwargs)
+
 def seobnrv4hm_length_in_time(**kwargs):
     """ Estimates the duration of SEOBNRv4HM waveforms that include higher modes.
     """
@@ -953,7 +960,7 @@ _filter_time_lengths["IMRPhenomHM"] = imrphenomhm_length_in_time
 _filter_time_lengths["IMRPhenomPv3HM"] = imrphenomhm_length_in_time
 _filter_time_lengths["IMRPhenomXHM"] = imrphenomhm_length_in_time
 _filter_time_lengths["IMRPhenomXPHM"] = imrphenomhm_length_in_time
-_filter_time_lengths["NRSur7dq4"] = seobnrv4hm_length_in_time
+_filter_time_lengths["NRSur7dq4"] = imrphenomhm_l5_length_in_time
 _filter_time_lengths["SpinTaylorF2"] = spa_length_in_time
 _filter_time_lengths["TaylorF2NL"] = spa_length_in_time
 _filter_time_lengths["PreTaylorF2"] = spa_length_in_time
