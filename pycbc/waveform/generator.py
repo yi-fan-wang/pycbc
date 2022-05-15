@@ -676,7 +676,7 @@ class FDomainDetFrameGenerator(BaseFDomainDetFrameGenerator):
             hp = hp.to_frequencyseries(delta_f=df)
             hc = hc.to_frequencyseries(delta_f=df)
 
-            if rfparams['approximant']=='mpvnosmall':
+            if 'parity_mpvinverse' in rfparams:
                 zz = cosmology.redshift(rfparams['distance'])
                 intz = integrate.quad(integrand_parityamu_mpvinverse, 0, zz)[0]
                 temp =  rfparams['parity_mpvinverse'] * intz / 1e9 / _lal.QE_SI * \
