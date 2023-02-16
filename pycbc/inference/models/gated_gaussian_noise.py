@@ -29,7 +29,7 @@ from pycbc.detector import Detector
 from pycbc.pnutils import hybrid_meco_frequency
 from pycbc.waveform.utils import time_from_frequencyseries
 from pycbc.waveform import generator
-from pycbc.filter import highpass
+from pycbc.filter import highpass,lowpass
 from .gaussian_noise import (BaseGaussianNoise, create_waveform_generator)
 from .base_data import BaseDataModel
 from .data_utils import fd_data_from_strain_dict
@@ -43,7 +43,8 @@ class BaseGatedGaussian(BaseGaussianNoise):
     """
     def __init__(self, variable_params, data, low_frequency_cutoff, psds=None,
                  high_frequency_cutoff=None, normalize=False,
-                 static_params=None, highpass_waveforms=False, **kwargs):
+                 static_params=None, highpass_waveforms=False, 
+                 lowpass_waveform=False,**kwargs):
         # we'll want the time-domain data, so store that
         self._td_data = {}
         # cache the current projection for debugging
@@ -55,9 +56,14 @@ class BaseGatedGaussian(BaseGaussianNoise):
         self._gated_data = {}
         # highpass waveforms with the given frequency
         self.highpass_waveforms = highpass_waveforms
+        # lowpass waveforms with the given frequency
+        self.lowpass_waveforms = lowpass_waveforms
         if self.highpass_waveforms:
             logging.info("Will highpass waveforms at %f Hz",
                          highpass_waveforms)
+        if self.lowpass_waveforms:
+            logging.info("Will lowpass waveforms at %f Hz",
+                         lowpass_waveforms)
         # set up the boiler-plate attributes
         super().__init__(
             variable_params, data, low_frequency_cutoff, psds=psds,
@@ -67,12 +73,17 @@ class BaseGatedGaussian(BaseGaussianNoise):
     @classmethod
     def from_config(cls, cp, data_section='data', data=None, psds=None,
                     **kwargs):
-        """Adds highpass filtering to keyword arguments based on config file.
+        """Adds highpass and lowpass filtering to keyword arguments based on 
+        config file.
         """
         if cp.has_option(data_section, 'strain-high-pass') and \
             'highpass_waveforms' not in kwargs:
             kwargs['highpass_waveforms'] = float(cp.get(data_section,
                                                         'strain-high-pass'))
+        if cp.has_option(data_section, 'strain-low-pass') and \
+            'lowpass_waveforms' not in kwargs:
+            kwargs['lowpass_waveforms'] = float(cp.get(data_section,
+                                                        'strain-low-pass'))
         return super().from_config(cp, data_section=data_section,
                                    data=data, psds=psds,
                                    **kwargs)
@@ -210,6 +221,11 @@ class BaseGatedGaussian(BaseGaussianNoise):
                     h = highpass(
                         h.to_timeseries(),
                         frequency=self.highpass_waveforms).to_frequencyseries()
+                # apply low pass
+                if self.lowpass_waveforms:
+                    h = lowpass(
+                        h.to_timeseries(),
+                        frequency=self.lowpass_waveforms).to_frequencys()
                 wfs[det] = h
             self._current_wfs = wfs
         return self._current_wfs
@@ -660,6 +676,14 @@ class GatedGaussianMargPol(BaseGatedGaussian):
                     hc = highpass(
                         hc.to_timeseries(),
                         frequency=self.highpass_waveforms).to_frequencyseries()
+                # apply low pass
+                if self.lowpass_waveforms:
+                    hp = lowpass(
+                        hp.to_timeseries(),
+                        frequency=self.lowpass_waveforms).to_frequencyseries()
+                    hc = lowpass(
+                        hc.to_timeseries(),
+                        frequency=self.lowpass_waveforms).to_frequencyseries()
                 wfs[det] = (hp, hc)
             self._current_wfs = wfs
         return self._current_wfs
