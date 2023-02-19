@@ -44,7 +44,7 @@ class BaseGatedGaussian(BaseGaussianNoise):
     def __init__(self, variable_params, data, low_frequency_cutoff, psds=None,
                  high_frequency_cutoff=None, normalize=False,
                  static_params=None, highpass_waveforms=False, 
-                 lowpass_waveform=False,**kwargs):
+                 lowpass_waveforms=False,**kwargs):
         # we'll want the time-domain data, so store that
         self._td_data = {}
         # cache the current projection for debugging
@@ -225,7 +225,7 @@ class BaseGatedGaussian(BaseGaussianNoise):
                 if self.lowpass_waveforms:
                     h = lowpass(
                         h.to_timeseries(),
-                        frequency=self.lowpass_waveforms).to_frequencys()
+                        frequency=self.lowpass_waveforms).to_frequencyseries()
                 wfs[det] = h
             self._current_wfs = wfs
         return self._current_wfs
