@@ -92,8 +92,12 @@ class BaseGatedGaussian(BaseGaussianNoise):
     def data(self, data):
         """Store a copy of the FD and TD data."""
         BaseDataModel.data.fset(self, data)
-        # store the td version
-        self._td_data = {det: d.to_timeseries() for det, d in data.items()}
+        # store the td version, zero-out data outside bandpass
+        self._td_data = {}
+        for det, d in data.items():
+            d[:self.highpass_waveforms] = 0
+            d[self.lowpass_waveforms:] = 0
+            self._td_data[det] = d.to_timeseries()
 
     @property
     def td_data(self):
@@ -128,9 +132,9 @@ class BaseGatedGaussian(BaseGaussianNoise):
             self._psds[det] = p
             # we'll store the weight to apply to the inner product
             invp = 1./p
-            # we pad the invp with the edge values outside the bandpass
-            invp[:self._kmin[det]] = invp[self._kmin[det]]
-            invp[self._kmax[det]:] = invp[self._kmax[det]]
+            # zero-out inverse PSD outside the bandpass
+            invp[:self.highpass_waveforms] = 0
+            invp[self.lowpass_waveforms:] = 0
             self._invpsds[det] = invp
         self._overwhitened_data = self.whiten(self.data, 2, inplace=False)
 
@@ -229,6 +233,9 @@ class BaseGatedGaussian(BaseGaussianNoise):
                     h = lowpass(
                         h.to_timeseries(),
                         frequency=self.lowpass_waveforms).to_frequencyseries()
+                #zero-out waveform outside bandpass frequency range
+                h[:self.highpass_waveforms] = 0
+                h[self.lowpass_waveforms:] = 0
                 wfs[det] = h
             self._current_wfs = wfs
         return self._current_wfs
