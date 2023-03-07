@@ -95,8 +95,10 @@ class BaseGatedGaussian(BaseGaussianNoise):
         # store the td version, zero-out data outside bandpass
         self._td_data = {}
         for det, d in data.items():
-            d[:self.highpass_waveforms] = 0
-            d[self.lowpass_waveforms:] = 0
+            if self.highpass_waveforms:
+                d[:self.highpass_waveforms//d.delta_f] = 0
+            if self.lowpass_waveforms:
+                d[self.lowpass_waveforms//d.delta_f:] = 0
             self._td_data[det] = d.to_timeseries()
 
     @property
@@ -133,8 +135,10 @@ class BaseGatedGaussian(BaseGaussianNoise):
             # we'll store the weight to apply to the inner product
             invp = 1./p
             # zero-out inverse PSD outside the bandpass
-            invp[:self.highpass_waveforms] = 0
-            invp[self.lowpass_waveforms:] = 0
+            if self.highpass_waveforms:
+                invp[:self.highpass_waveforms//d.delta_f] = 0
+            if self.lowpass_waveforms:
+                invp[self.lowpass_waveforms//d.delta_f:] = 0
             self._invpsds[det] = invp
         self._overwhitened_data = self.whiten(self.data, 2, inplace=False)
 
@@ -228,14 +232,13 @@ class BaseGatedGaussian(BaseGaussianNoise):
                     h = highpass(
                         h.to_timeseries(),
                         frequency=self.highpass_waveforms).to_frequencyseries()
+                    h[:self.highpass_waveforms//h.delta_f] = 0
                 # apply low pass
                 if self.lowpass_waveforms:
                     h = lowpass(
                         h.to_timeseries(),
                         frequency=self.lowpass_waveforms).to_frequencyseries()
-                #zero-out waveform outside bandpass frequency range
-                h[:self.highpass_waveforms] = 0
-                h[self.lowpass_waveforms:] = 0
+                    h[self.lowpass_waveforms//h.delta_f:] = 0
                 wfs[det] = h
             self._current_wfs = wfs
         return self._current_wfs
