@@ -128,9 +128,15 @@ class BaseGatedGaussian(BaseGaussianNoise):
             self._psds[det] = p
             # we'll store the weight to apply to the inner product
             invp = 1./p
-            # we pad the invp with the edge values outside the bandpass
-            invp[:self._kmin[det]] = invp[self._kmin[det]]
-            invp[self._kmax[det]:] = invp[self._kmax[det]]
+            # bandpass inverse PSD
+            if self.highpass_waveforms:
+                invp = highpass(
+                        invp.to_timeseries(),
+                        frequency=self.highpass_waveforms).to_frequencyseries()
+            if self.lowpass_waveforms:
+                invp = lowpass(
+                        invp.to_timeseries(),
+                        frequency=self.lowpass_waveforms).to_frequencyseries()
             self._invpsds[det] = invp
         self._overwhitened_data = self.whiten(self.data, 2, inplace=False)
 
