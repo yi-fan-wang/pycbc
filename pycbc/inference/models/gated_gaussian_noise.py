@@ -131,11 +131,11 @@ class BaseGatedGaussian(BaseGaussianNoise):
             # bandpass inverse PSD
             if self.highpass_waveforms:
                 invp = highpass(
-                        invp.to_timeseries(),
+                        invp.astype('complex').to_timeseries(),
                         frequency=self.highpass_waveforms).to_frequencyseries()
             if self.lowpass_waveforms:
                 invp = lowpass(
-                        invp.to_timeseries(),
+                        invp.astype('complex').to_timeseries(),
                         frequency=self.lowpass_waveforms).to_frequencyseries()
             self._invpsds[det] = invp
         self._overwhitened_data = self.whiten(self.data, 2, inplace=False)
