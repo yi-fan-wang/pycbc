@@ -163,7 +163,8 @@ def fir_zero_filter(coeff, timeseries):
     series.roll(-len(coeff)//2)
     return series
 
-def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
+def resample_to_delta_t(timeseries, delta_t, method='butterworth',
+                        preserve_time=None):
     """Resmple the time_series to delta_t
 
     Resamples the TimeSeries instance time_series to the given time step,
@@ -177,6 +178,11 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
         The time series to be resampled
     delta_t: float
         The desired time step
+    method: string
+        The method of subsampling, 'Butterworth' or 'ldas'
+    preserve_time: float, default: None
+        The time stamp to be preserved, only find the nearest time stamp
+        and only support 'ldas' method for now
 
     Returns
     -------
@@ -218,8 +224,18 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
         filter_coefficients = cached_firwin(numtaps, 1.0 / factor,
                                             window=('kaiser', 5))
 
+        # find the index of the preserved time stamp
+        if preserve_time is not None:
+            if not (preserve_time > timeseries.start_time and preserve_time < timeseries.end_time):
+                raise ValueError("Preserved time %f must be greater than strain's"
+                                 "start time %f and less than end time %f." 
+                                 % (preserve_time,timeseries.start_time,timeseries.end_time))
+            idx = int(round((preserve_time - float(timeseries.start_time)) 
+                            / timeseries.delta_t)) % factors
+        else:
+            idx = 0
         # apply the filter and decimate
-        data = fir_zero_filter(filter_coefficients, timeseries)[::factor]
+        data = fir_zero_filter(filter_coefficients, timeseries)[idx::factor]
 
     else:
         raise ValueError('Invalid resampling method: %s' % method)

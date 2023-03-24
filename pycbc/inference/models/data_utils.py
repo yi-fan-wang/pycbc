@@ -116,6 +116,11 @@ def create_data_parser():
                              "PSD estimation and when creating fake strain. "
                              "If not provided, will use the model's "
                              "low-frequency-cutoff.")
+    parser.add_argument("--preserve-time", type=float,
+                        nargs="+", action=MultiDetOptionAction,
+                        metavar='IFO:TIME',
+                        help="Preserved time in the data. When subsampling "
+                             "the data, the preserved time will be retained.")
     insert_psd_option_group_multi_ifo(parser)
     strain.insert_strain_option_group_multi_ifo(parser, gps_times=False)
     strain.add_gate_option_group(parser)

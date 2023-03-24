@@ -304,7 +304,8 @@ def from_cli(opt, dyn_range_fac=1, precision='single',
         logging.info("Resampling data")
         strain = resample_to_delta_t(strain,
                                      1. / opt.sample_rate,
-                                     method='ldas')
+                                     method='ldas',
+                                     preserve_time = None)
 
     if injector is not None:
         logging.info("Applying injections")
