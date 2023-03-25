@@ -231,7 +231,7 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth',
                                  "start time %f and less than end time %f." 
                                  % (preserve_time,timeseries.start_time,timeseries.end_time))
             idx = int(round((preserve_time - float(timeseries.start_time)) 
-                            / timeseries.delta_t)) % factors
+                            / timeseries.delta_t)) % factor
         else:
             idx = 0
         # apply the filter and decimate
