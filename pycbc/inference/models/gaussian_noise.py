@@ -129,13 +129,16 @@ class BaseGaussianNoise(BaseDataModel, metaclass=ABCMeta):
         # check that the data sets all have the same delta fs and delta ts
         dts = numpy.array([d.delta_t for d in self.data.values()])
         dfs = numpy.array([d.delta_f for d in self.data.values()])
-        if all(dts == dts[0]) and all(dfs == dfs[0]):
+        start_times = numpy.array([d.start_time for d in self.data.values()])
+        if all(dts == dts[0]) and all(dfs == dfs[0]) and all(start_times == start_times[0]):
             self.all_ifodata_same_rate_length = True
         else:
             self.all_ifodata_same_rate_length = False
             logging.info(
-                "You are using different data segment lengths or "
-                "sampling rates for different IFOs")
+                "You are using different segment lengths or "
+                "sampling rates or start time for different "
+                "IFOs' data. Hence creating waveform generator"
+                "for each IFO.")
 
         # store the number of samples in the time domain
         self._N = {}
@@ -824,7 +827,7 @@ class GaussianNoise(BaseGaussianNoise):
             variable_params, data, low_frequency_cutoff, psds=psds,
             high_frequency_cutoff=high_frequency_cutoff, normalize=normalize,
             static_params=static_params, **kwargs)
-        # Determine if all data have the same sampling rate and segment length
+        # Determine if all data have the same sampling rate, length and start time
         if self.all_ifodata_same_rate_length:
             # create a waveform generator for all ifos
             self.waveform_generator = create_waveform_generator(
@@ -833,7 +836,7 @@ class GaussianNoise(BaseGaussianNoise):
                 recalibration=self.recalibration,
                 gates=self.gates, **self.static_params)
         else:
-            # create a waveform generator for each ifo respestively
+            # create a waveform generator for each ifo respectively
             self.waveform_generator = {}
             for det in self.data:
                 self.waveform_generator[det] = create_waveform_generator(

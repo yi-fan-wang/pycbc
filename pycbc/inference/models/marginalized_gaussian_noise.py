@@ -219,7 +219,7 @@ class MarginalizedTime(DistMarg, BaseGaussianNoise):
             variable_params, data, low_frequency_cutoff, psds=psds,
             high_frequency_cutoff=high_frequency_cutoff, normalize=normalize,
             **kwargs)
-        # Determine if all data have the same sampling rate and segment length
+        # Determine if all data have the same sampling rate, length and start time
         if self.all_ifodata_same_rate_length:
             # create a waveform generator for all ifos
             self.waveform_generator = create_waveform_generator(
@@ -229,7 +229,7 @@ class MarginalizedTime(DistMarg, BaseGaussianNoise):
                 generator_class=generator.FDomainDetFrameTwoPolNoRespGenerator,
                 gates=self.gates, **kwargs['static_params'])
         else:
-            # create a waveform generator for each ifo respestively
+            # create a waveform generator for each ifo respectively
             self.waveform_generator = {}
             for det in self.data:
                 self.waveform_generator[det] = create_waveform_generator(
@@ -376,7 +376,7 @@ class MarginalizedPolarization(DistMarg, BaseGaussianNoise):
             variable_params, data, low_frequency_cutoff, psds=psds,
             high_frequency_cutoff=high_frequency_cutoff, normalize=normalize,
             **kwargs)
-        # Determine if all data have the same sampling rate and segment length
+        # Determine if all data have the same sampling rate, length and start time
         if self.all_ifodata_same_rate_length:
             # create a waveform generator for all ifos
             self.waveform_generator = create_waveform_generator(
@@ -386,7 +386,7 @@ class MarginalizedPolarization(DistMarg, BaseGaussianNoise):
                 generator_class=generator.FDomainDetFrameTwoPolGenerator,
                 gates=self.gates, **kwargs['static_params'])
         else:
-            # create a waveform generator for each ifo respestively
+            # create a waveform generator for each ifo respectively
             self.waveform_generator = {}
             for det in self.data:
                 self.waveform_generator[det] = create_waveform_generator(

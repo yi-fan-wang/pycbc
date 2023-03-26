@@ -201,7 +201,12 @@ class BaseGatedGaussian(BaseGaussianNoise):
         """
         if self._current_wfs is None:
             params = self.current_params
-            wfs = self.waveform_generator.generate(**params)
+            if self.all_ifodata_same_rate_length:
+                wfs = self.waveform_generator.generate(**params)
+            else:
+                wfs = {}
+                for det in self.data:
+                    wfs.update(self.waveform_generator[det].generate(**params))
             for det, h in wfs.items():
                 # make the same length as the data
                 h.resize(len(self.data[det]))
@@ -507,12 +512,23 @@ class GatedGaussianNoise(BaseGatedGaussian):
             variable_params, data, low_frequency_cutoff, psds=psds,
             high_frequency_cutoff=high_frequency_cutoff, normalize=normalize,
             static_params=static_params, **kwargs)
-        # create the waveform generator
-        self.waveform_generator = create_waveform_generator(
-            self.variable_params, self.data,
-            waveform_transforms=self.waveform_transforms,
-            recalibration=self.recalibration,
-            gates=self.gates, **self.static_params)
+        # Determine if all data have the same sampling rate, length and start time
+        if self.all_ifodata_same_rate_length:
+            # create the waveform generator
+            self.waveform_generator = create_waveform_generator(
+                self.variable_params, self.data,
+                waveform_transforms=self.waveform_transforms,
+                recalibration=self.recalibration,
+                gates=self.gates, **self.static_params)
+        else:
+            # create a waveform generator for each ifo respectively
+            self.waveform_generator = {}
+            for det in self.data:
+                self.waveform_generator[det] = create_waveform_generator(
+                    self.variable_params, {det: self.data[det]},
+                    waveform_transforms=self.waveform_transforms,
+                    recalibration=self.recalibration,
+                    gates=self.gates, **self.static_params)
 
     @property
     def _extra_stats(self):
