@@ -773,3 +773,118 @@ class GatedGaussianMargPol(BaseGatedGaussian):
         # compute the marginalized log likelihood
         marglogl = special.logsumexp(loglr) + lognl - numpy.log(len(self.pol))
         return float(marglogl)
+
+class GatedGaussianMargPhase(BaseGatedGaussian):
+    r"""Gated gaussian model with analytical marginalization over phase.
+
+    This implements the GatedGaussian likelihood with an analytical 
+    marginalization over phase angle. 
+    """
+    name = 'gated_gaussian_margphase'
+
+    def __init__(self, variable_params, data, low_frequency_cutoff, psds=None,
+                 high_frequency_cutoff=None, normalize=False,
+                 static_params=None, **kwargs):
+        # set up the boiler-plate attributes
+        super().__init__(
+            variable_params, data, low_frequency_cutoff, psds=psds,
+            high_frequency_cutoff=high_frequency_cutoff, normalize=normalize,
+            static_params=static_params, **kwargs)
+        # create the waveform generator
+        self.waveform_generator = create_waveform_generator(
+            self.variable_params, self.data,
+            waveform_transforms=self.waveform_transforms,
+            recalibration=self.recalibration,
+            generator_class=generator.FDomainDetFrameTwoPolGenerator,
+            **self.static_params)
+
+    @property
+    def _extra_stats(self):
+        """Adds the maxL polarization and corresponding likelihood."""
+        return ['maxl_phase', 'maxl_logl']
+
+    def _loglikelihood(self):
+        r"""Computes the log likelihood after removing the power within the
+        given time window,
+
+        .. math::
+            \log p(d|\Theta) = -\frac{1}{2} \sum_i
+             \left< d_i - h_i(\Theta) | d_i - h_i(\Theta) \right>,
+
+        at the current parameter values :math:`\Theta`.
+
+        Returns
+        -------
+        float
+            The value of the log likelihood.
+        """
+        # generate the template waveform
+        try:
+            wfs = self.get_waveforms()
+        except NoWaveformError:
+            return self._nowaveform_logl()
+        except FailedWaveformError as e:
+            if self.ignore_failed_waveforms:
+                return self._nowaveform_logl()
+            raise e
+        # get the gated waveforms and data
+        gated_wfs = self.get_gated_waveforms()
+        gated_data = self.get_gated_data()
+        # cycle over
+        loglr = 0.
+        lognl = 0.
+        for det, (hp, hc) in wfs.items():
+            # get the antenna patterns
+            if det not in self.dets:
+                self.dets[det] = Detector(det)
+            fp, fc = self.dets[det].antenna_pattern(self.current_params['ra'],
+                                                    self.current_params['dec'],
+                                                    self.pol,
+                                                    self.current_params['tc'])
+            norm = self.det_lognorm(det)
+            # we always filter the entire segment starting from kmin, since the
+            # gated series may have high frequency components
+            slc = slice(self._kmin[det], self._kmax[det])
+            # get the gated values
+            gated_hp, gated_hc = gated_wfs[det]
+            gated_d = gated_data[det]
+            # we'll overwhiten the ungated data and waveforms for computing
+            # inner products
+            d = self._overwhitened_data[det]
+            # overwhiten the hp and hc
+            # we'll do this in place for computational efficiency, but as a
+            # result we'll clear the current waveforms cache so a repeated call
+            # to get_waveforms does not return the overwhitened versions
+            self._current_wfs = None
+            invpsd = self._invpsds[det]
+            hp *= invpsd
+            hc *= invpsd
+            # get the various gated inner products
+            hpd = hp[slc].inner(gated_d[slc]).real  # <hp, d>
+            hcd = hc[slc].inner(gated_d[slc]).real  # <hc, d>
+            dhp = d[slc].inner(gated_hp[slc]).real  # <d, hp>
+            dhc = d[slc].inner(gated_hc[slc]).real  # <d, hc>
+            hphp = hp[slc].inner(gated_hp[slc]).real  # <hp, hp>
+            hchc = hc[slc].inner(gated_hc[slc]).real  # <hc, hc>
+            hphc = hp[slc].inner(gated_hc[slc]).real  # <hp, hc>
+            hchp = hc[slc].inner(gated_hp[slc]).real  # <hc, hp>
+            dd = d[slc].inner(gated_d[slc]).real  # <d, d>
+            # since the antenna patterns are real,
+            # <h, d>/2 + <d, h>/2 = fp*(<hp, d>/2 + <d, hp>/2)
+            #                     + fc*(<hc, d>/2 + <d, hc>/2)
+            hd = fp*(hpd + dhp) + fc*(hcd + dhc)
+            # <h, h>/2 = <fp*hp + fc*hc, fp*hp + fc*hc>/2
+            #          = fp*fp*<hp, hp>/2 + fc*fc*<hc, hc>/2
+            #            + fp*fc*<hp, hc>/2 + fc*fp*<hc, hp>/2
+            hh = fp*fp*hphp + fc*fc*hchc + fp*fc*(hphc + hchp)
+            # sum up; note that the factor is 2df instead of 4df to account
+            # for the factor of 1/2
+            loglr += norm + 2*invpsd.delta_f*(hd - hh)
+            lognl += -2 * invpsd.delta_f * dd
+        # store the maxl polarization
+        idx = loglr.argmax()
+        setattr(self._current_stats, 'maxl_polarization', self.pol[idx])
+        setattr(self._current_stats, 'maxl_logl', loglr[idx] + lognl)
+        # compute the marginalized log likelihood
+        marglogl = special.logsumexp(loglr) + lognl - numpy.log(len(self.pol))
+        return float(marglogl)

@@ -604,6 +604,144 @@ def td_damped_sinusoid(f_0, tau, amp, phi, times,
             + xlnm * alnm * numpy.exp(damping - 1j*(omegalm - phinm))
     return hlm.real, hlm.imag
 
+def td_damped_sinusoid_mmodes(f_0, tau, amp, phi, times,
+                       l=2, m=2, n=0, inclination=0., azimuthal=0.,
+                       dphi=0., dbeta=0.,
+                       harmonics='spherical', final_spin=None,
+                       pol=None, polnm=None):
+    r"""Return a time domain damped sinusoid (plus and cross polarizations)
+    for positive m mode and negative m mode respectively
+    with central frequency f_0, damping time tau, amplitude amp and phase phi.
+
+    This returns the plus and cross polarization of the QNM, defined as
+    :math:`h^{+,\times}_{l|m|n} = (\Re, \Im) \{ h_{l|m|n}(t)\right}`, where
+
+    .. math::
+
+        h_{l|m|n}(t) &:= A_{lmn} X_{lmn}(\theta, \varphi)
+            e^{-t/\tau_{lmn} + i(2\pi f_{lmn}t + \phi_{lmn})} \\
+            & + A_{l-mn} X_{l-mn}(\theta, \varphi)
+            e^{-t/\tau_{lmn} - i(2\pi f_{lmn}t + \phi_{l-mn})}
+
+    Here, the :math:`X_{lmn}(\theta, \varphi)` are either the spherical or
+    spheroidal harmonics, or an arbitrary complex number, depending on the
+    input arguments. This uses the convention that the +/-m modes are
+    related to each other via  :math:`f_{l-mn} = -f_{lmn}` and
+    :math:`\tau_{l-mn} = \tau_{lmn}`. The amplitudes :math:`A_{l(-)mn}` and
+    phases :math:`\phi_{l(-)mn}` of the +/-m modes are related to each other
+    by:
+
+    .. math::
+
+        \phi_{l-mn} = l\pi + \Delta \phi_{lmn} - \phi_{lmn}
+
+    and
+
+    .. math::
+
+        A_{lmn} &= A^0_{lmn} \sqrt{2} \cos(\pi/4 + \Delta \beta_{lmn})\\
+        A_{lmn} &= A^0_{lmn} \sqrt{2} \sin(\pi/4 +  \Delta \beta_{lmn}).
+
+    Here, :math:`A^0_{lmn}` is an overall fiducial amplitude (set by the
+    ``amp``) parameter, and
+
+    .. math::
+
+        \Delta \beta_{lmn} &\in [-pi/4, pi/4], \\
+        \Delta \phi_{lmn}  &\in (-pi, pi)
+
+    are parameters that define the deviation from circular polarization.
+    Circular polarization occurs when both :math:`\Delta \beta_{lmn}` and
+    :math:`\Delta \phi_{lmn}` are zero (this is equivalent to assuming that
+    :math:`h_{l-mn} = (-1)^l h_{lmn}^*`).
+
+    Parameters
+    ----------
+    f_0 : float
+        The central frequency of the damped sinusoid, in Hz.
+    tau : float
+        The damping time, in seconds.
+    amp : float
+        The intrinsic amplitude of the QNM (:math:`A^0_{lmn}` in the above).
+    phi : float
+        The reference phase of the QNM (:math:`\phi_{lmn}`) in the above.
+    times : array
+        Array of times to use, where t=0 is considered the start of the
+        ringdown. Times are assumed to be monotonically increasing. A taper of
+        10x the damping time will be used for any negative times.
+    l : int, optional
+        The l index; default is 2.
+    m : int, optional
+        The m index; default is 2.
+    n : int, optional
+        The overtone index; default is 0.
+    inclination : float, optional
+        The inclination angle (:math:`\theta` in the above). Ignored if
+        ``harmonics='arbitrary'``. Default is 0.
+    azimuthal : float, optional
+        The azimuthal angle (:math:`\varphi` in the above). Ignored if
+        ``harmonics='arbitrary'``. Default is 0.
+    dphi : float, optional
+        The difference in phase between the +m and -m mode
+        (:math:`\Delta \phi_{lmn}` in the above). Default is 0.
+    dbeta : float, optional
+        The angular difference in the amplitudes of the +m and -m mode
+        (:math:`\Delta \beta_{lmn}` in the above). Default is 0. If this and
+        dphi are both 0, will have circularly polarized waves.
+    harmonics : {'spherical', 'spheroidal', 'arbitrary'}, optional
+        Which harmonics to use. See :py:func:`spher_harms` for details.
+        Default is spherical.
+    final_spin : float, optional
+        The dimensionless spin of the black hole. Only needed if
+        ``harmonics='spheroidal'``.
+    pol : float, optional
+        Angle to use for +m arbitrary harmonics. Only needed if
+        ``harmonics='arbitrary'``. See :py:func:`spher_harms` for details.
+    polnm : float, optional
+        Angle to use for -m arbitrary harmonics. Only needed if
+        ``harmonics='arbitrary'``. See :py:func:`spher_harms` for details.
+
+    Returns
+    -------
+    hplus_pm : numpy.ndarray
+        The plus polarization for positive m mode.
+    hcross_pm : numpy.ndarray
+        The cross polarization for positive m mode.
+    hplus_nm : numpy.ndarray
+        The plus polarization for negative m mode
+    hcross_nm : numpy.ndarray
+        The cross polarization for negative m mode
+    """
+    # evaluate the harmonics
+    xlm, xlnm = spher_harms(harmonics=harmonics, l=l, m=m, n=n,
+                            inclination=inclination, azimuthal=azimuthal,
+                            spin=final_spin, pol=pol, polnm=polnm)
+    # generate the +/-m modes
+    # we measure things as deviations from circular polarization, which occurs
+    # when h_{l-m} = (-1)^l h_{lm}^*; that implies that
+    # phi_{l-m} = - phi_{lm} and A_{l-m} = (-1)^l A_{lm}
+    omegalm = two_pi * f_0 * times
+    damping = -times/tau
+    # check for negative times
+    mask = times < 0
+    if mask.any():
+        damping[mask] = 10*times[mask]/tau
+    if m == 0:
+        # no -m, just calculate
+        hlm = xlm * amp * numpy.exp(damping + 1j*(omegalm + phi))
+    else:
+        # amplitude
+        if dbeta == 0:
+            alm = alnm = amp
+        else:
+            beta = pi/4 + dbeta
+            alm = 2**0.5 * amp * numpy.cos(beta)
+            alnm = 2**0.5 * amp * numpy.sin(beta)
+        # phase
+        phinm = l*pi + dphi - phi
+        hlm_pm = xlm * alm * numpy.exp(damping + 1j*(omegalm + phi)) 
+        hlm_nm = xlnm * alnm * numpy.exp(damping - 1j*(omegalm - phinm))
+    return hlm_pm.real, hlm_pm.imag, hlm_nm.real, hlm_nm.real
 
 def fd_damped_sinusoid(f_0, tau, amp, phi, freqs, t_0=0.,
                        l=2, m=2, n=0, inclination=0., azimuthal=0.,
@@ -803,6 +941,8 @@ def multimode_base(input_params, domain, freq_tau_approximant=False):
                 pol=pols[lmn], polnm=polnms[lmn])
             outplus[kmin:] += hplus
             outcross[kmin:] += hcross
+        elif domain == 'td_mmode':
+
     return norm * outplus, norm * outcross
 
 
@@ -811,6 +951,117 @@ def multimode_base(input_params, domain, freq_tau_approximant=False):
 ######################################################
 
 def get_td_from_final_mass_spin(template=None, **kwargs):
+    """Return time domain ringdown with all the modes specified.
+
+    Parameters
+    ----------
+    template : object
+        An object that has attached properties. This can be used to substitute
+        for keyword arguments. A common example would be a row in an xml table.
+    final_mass : float
+        Mass of the final black hole in solar masses.
+    final_spin : float
+        Dimensionless spin of the final black hole.
+    distance : {None, float}, optional
+        Luminosity distance of the system. If specified, the returned ringdown
+        will include the Kerr factor (final_mass/distance).
+    lmns : list
+        Desired lmn modes as strings. All modes up to l = m = 7 are available.
+        The n specifies the number of overtones desired for the corresponding
+        lm pair, not the overtone number; maximum n=8. Example:
+        lmns = ['223','331'] are the modes 220, 221, 222, and 330
+    ref_amp : str, optional
+        Which mode to use as the reference for computing amplitudes. Must be
+        'amp220' if distance is given. Default is 'amp220'. The amplitude of
+        the reference mode should be specified directly, while all other
+        amplitudes are specified as ratios with respect to that mode.  For
+        example, if ``ref_amp = 'amp220'``, ``lmns = ['221', '331']``, and no
+        distance is provided, then ``amp220 = 1e-22, amp330 = 0.1`` would
+        result in the 220 mode having a strain amplitude of 1e-22 and the 330
+        mode having a strain amplitude of 1e-23. If distance is given, the
+        amplitude of the reference mode will have a completely different order
+        of magnitude.  See table II in https://arxiv.org/abs/1107.0854 for an
+        estimate. An amplitude for the reference mode must always be provided,
+        even if that mode is not being generated. For example, if
+        ``ref_amp = 'amp220'`` and ``lmns = ['331']`` then both a ``amp220``
+        and ``amp330`` must be provided even though only the 330 mode will
+        be created.
+    amplmn : float
+        The amplitude of each mode, required for all modes specifed plus the
+        reference mode. As described above, amplitudes should be specified
+        relative to the reference mode.
+    philmn : float
+        Phase of the lmn overtone, as many as the number of modes.
+    inclination : float
+        Inclination of the system in radians. Ignored if
+        ``harmonics='arbitrary'``. Default is 0.
+    azimuthal : float, optional
+        The azimuthal angle in radians. Ignored if ``harmonics='arbitrary'``.
+        Usually this is not necessary to specify since it is degenerate with
+        initial phase ``philmn``; i.e., this is only useful if you have an
+        expectation for what the phase of each mode is. Default is 0.
+    dphi[lmn] : float, optional
+        The difference in phase between the +m and -m mode. See the
+        documentation for ``dphi`` in :py:func:`td_damped_sinusoid` for
+        details. You may specify a
+        ``dphi{lmn}`` (ex. ``dphi220``) separately for each mode, and/or a
+        single ``dphi`` (without any lmn) for all modes that do not have
+        ``dphi`` specified. Default is to use 0 for all modes.
+    dbeta[lmn] : float, optional
+        The angular difference in the amplitudes of the +m and -m mode. See the
+        documentation for ``dbeta`` in :py:func:`td_damped_sinusoid` for
+        details. You may specify a ``dbeta{lmn}`` (ex. ``dbeta220``)
+        separately for each mode, and/or a
+        single ``dbeta`` (without any lmn) for all modes that do not have
+        ``dbeta`` specified. Default is to use 0 for all modes.
+    pollmn : float, optional
+        Angle to use for +m arbitrary harmonics of the lmn mode in radians
+        (example: ``pol220 = 0.1``. Only needed if ``harmonics='arbitrary'``,
+        ignored otherwise. See :py:func:`spher_harms` for details.
+    polnmlmn : float, optional
+        Angle to use for -m arbitrary harmonics of the lmn mode in radians
+        (example: ``polnm220 = 0.1``). Only needed if
+        ``harmonics='arbitrary'``, ignored otherwise. See :py:func:`spher_harms`
+        for details.
+    harmonics : {'spherical', 'spheroidal', 'arbitrary'}, optional
+        Which harmonics to use. See :py:func:`spher_harms` for details.
+        Default is spherical.
+    delta_flmn: {None, float}, optional
+        GR deviation for the frequency of the lmn mode. If given, the lmn
+        frequency will be converted to new_flmn = flmn + delta_flmn * flmn,
+        with flmn the GR predicted value for the corresponding mass and spin.
+    delta_taulmn: {None, float}, optional
+        GR deviation for the damping time of the lmn mode. If given, the lmn
+        tau will be converted to new_taulmn = taulmn + delta_taulmn * taulmn,
+        with taulmn the GR predicted value for the corresponding mass and spin.
+    delta_t : {None, float}, optional
+        The time step used to generate the ringdown.
+        If None, it will be set to the inverse of the frequency at which the
+        amplitude is 1/1000 of the peak amplitude (the minimum of all modes).
+    t_final : {None, float}, optional
+        The ending time of the output frequency series.
+        If None, it will be set to the time at which the amplitude
+        is 1/1000 of the peak amplitude (the maximum of all modes).
+    taper : bool, optional
+        Add a rapid ringup with timescale tau/10 at the beginning of the
+        waveform to avoid the abrupt turn on of the ringdown. Each mode and
+        overtone will have a different taper depending on its tau,
+        the final taper being the superposition of all the tapers. Default is
+        False.
+
+    Returns
+    -------
+    hplus : TimeSeries
+        The plus phase of a ringdown with the lm modes specified and
+        n overtones in time domain.
+    hcross : TimeSeries
+        The cross phase of a ringdown with the lm modes specified and
+        n overtones in time domain.
+    """
+    input_params = props(template, mass_spin_required_args, td_args, **kwargs)
+    return multimode_base(input_params, domain='td')
+
+def get_td_from_final_mass_spin_mmode(template=None, **kwargs):
     """Return time domain ringdown with all the modes specified.
 
     Parameters
