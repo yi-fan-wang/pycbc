@@ -795,8 +795,49 @@ class GatedGaussianMargPhase(BaseGatedGaussian):
             self.variable_params, self.data,
             waveform_transforms=self.waveform_transforms,
             recalibration=self.recalibration,
-            generator_class=generator.FDomainDetFrameTwoPolGenerator,
+            generator_class=generator.FDomainDetFramePNmmodeGenerator,
             **self.static_params)
+
+    def get_waveforms(self):
+        # PLACE HOLDER!!!
+        if self._current_wfs is None:
+            params = self.current_params
+            wfs = self.waveform_generator.generate(**params)
+            for det, (hp, hc) in wfs.items():
+                # make the same length as the data
+                hp.resize(len(self.data[det]))
+                hc.resize(len(self.data[det]))
+                # apply high pass
+                if self.highpass_waveforms:
+                    hp = highpass(
+                        hp.to_timeseries(),
+                        frequency=self.highpass_waveforms).to_frequencyseries()
+                    hc = highpass(
+                        hc.to_timeseries(),
+                        frequency=self.highpass_waveforms).to_frequencyseries()
+                wfs[det] = (hp, hc)
+            self._current_wfs = wfs
+        return self._current_wfs
+
+    def get_gated_waveforms(self):
+        # PLACE HOLDER!!!
+        wfs = self.get_waveforms()
+        gate_times = self.get_gate_times()
+        out = {}
+        for det in wfs:
+            invpsd = self._invpsds[det]
+            gatestartdelay, dgatedelay = gate_times[det]
+            # the waveforms are a dictionary of (hp, hc)
+            pols = []
+            for h in wfs[det]:
+                ht = h.to_timeseries()
+                ht = ht.gate(gatestartdelay + dgatedelay/2,
+                             window=dgatedelay/2, copy=False,
+                             invpsd=invpsd, method='paint')
+                h = ht.to_frequencyseries()
+                pols.append(h)
+            out[det] = tuple(pols)
+        return out
 
     @property
     def _extra_stats(self):
@@ -833,20 +874,12 @@ class GatedGaussianMargPhase(BaseGatedGaussian):
         # cycle over
         loglr = 0.
         lognl = 0.
-        for det, (hp, hc) in wfs.items():
-            # get the antenna patterns
-            if det not in self.dets:
-                self.dets[det] = Detector(det)
-            fp, fc = self.dets[det].antenna_pattern(self.current_params['ra'],
-                                                    self.current_params['dec'],
-                                                    self.pol,
-                                                    self.current_params['tc'])
-            norm = self.det_lognorm(det)
+        for det, (h_pm, h_nm) in wfs.items():
             # we always filter the entire segment starting from kmin, since the
             # gated series may have high frequency components
             slc = slice(self._kmin[det], self._kmax[det])
             # get the gated values
-            gated_hp, gated_hc = gated_wfs[det]
+            gated_h_pm, gated_h_nm = gated_wfs[det]
             gated_d = gated_data[det]
             # we'll overwhiten the ungated data and waveforms for computing
             # inner products
@@ -857,8 +890,8 @@ class GatedGaussianMargPhase(BaseGatedGaussian):
             # to get_waveforms does not return the overwhitened versions
             self._current_wfs = None
             invpsd = self._invpsds[det]
-            hp *= invpsd
-            hc *= invpsd
+            h_pm *= invpsd
+            h_nm *= invpsd
             # get the various gated inner products
             hpd = hp[slc].inner(gated_d[slc]).real  # <hp, d>
             hcd = hc[slc].inner(gated_d[slc]).real  # <hc, d>
@@ -868,22 +901,14 @@ class GatedGaussianMargPhase(BaseGatedGaussian):
             hchc = hc[slc].inner(gated_hc[slc]).real  # <hc, hc>
             hphc = hp[slc].inner(gated_hc[slc]).real  # <hp, hc>
             hchp = hc[slc].inner(gated_hp[slc]).real  # <hc, hp>
-            dd = d[slc].inner(gated_d[slc]).real  # <d, d>
-            # since the antenna patterns are real,
-            # <h, d>/2 + <d, h>/2 = fp*(<hp, d>/2 + <d, hp>/2)
-            #                     + fc*(<hc, d>/2 + <d, hc>/2)
-            hd = fp*(hpd + dhp) + fc*(hcd + dhc)
-            # <h, h>/2 = <fp*hp + fc*hc, fp*hp + fc*hc>/2
-            #          = fp*fp*<hp, hp>/2 + fc*fc*<hc, hc>/2
-            #            + fp*fc*<hp, hc>/2 + fc*fp*<hc, hp>/2
-            hh = fp*fp*hphp + fc*fc*hchc + fp*fc*(hphc + hchp)
+            dd = d[slc].inner(gated_d[slc]).real  # <d, d>)
             # sum up; note that the factor is 2df instead of 4df to account
             # for the factor of 1/2
             loglr += norm + 2*invpsd.delta_f*(hd - hh)
             lognl += -2 * invpsd.delta_f * dd
         # store the maxl polarization
         idx = loglr.argmax()
-        setattr(self._current_stats, 'maxl_polarization', self.pol[idx])
+        setattr(self._current_stats, 'maxl_phase', self.pol[idx])
         setattr(self._current_stats, 'maxl_logl', loglr[idx] + lognl)
         # compute the marginalized log likelihood
         marglogl = special.logsumexp(loglr) + lognl - numpy.log(len(self.pol))

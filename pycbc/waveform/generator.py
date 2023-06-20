@@ -1129,7 +1129,7 @@ class FDomainDetFrameModesGenerator(BaseFDomainDetFrameGenerator):
         """
         return select_waveform_modes_generator(approximant)
 
-class FDomainDetFramePNmmodesGenerator(BaseFDomainDetFrameGenerator):
+class FDomainDetFramePNmmodeGenerator(BaseFDomainDetFrameGenerator):
     """Generates frequency-domain waveform in a specific frame.
 
     Generates both polarizations of a waveform using the given radiation frame
