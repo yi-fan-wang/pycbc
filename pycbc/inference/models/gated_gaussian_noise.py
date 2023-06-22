@@ -872,43 +872,31 @@ class GatedGaussianMargPhase(BaseGatedGaussian):
         gated_wfs = self.get_gated_waveforms()
         gated_data = self.get_gated_data()
         # cycle over
-        loglr = 0.
-        lognl = 0.
-        for det, (h_pm, h_nm) in wfs.items():
-            # we always filter the entire segment starting from kmin, since the
-            # gated series may have high frequency components
-            slc = slice(self._kmin[det], self._kmax[det])
-            # get the gated values
-            gated_h_pm, gated_h_nm = gated_wfs[det]
+        loglr = 0
+        lognl = 0
+        #hh = 0.
+        #hd = 0j
+        for det, (h_plusm, h_negm) in wfs.items():
+            gated_h = gated_wfs[det]
             gated_d = gated_data[det]
-            # we'll overwhiten the ungated data and waveforms for computing
-            # inner products
             d = self._overwhitened_data[det]
-            # overwhiten the hp and hc
-            # we'll do this in place for computational efficiency, but as a
-            # result we'll clear the current waveforms cache so a repeated call
-            # to get_waveforms does not return the overwhitened versions
-            self._current_wfs = None
             invpsd = self._invpsds[det]
-            h_pm *= invpsd
-            h_nm *= invpsd
+            h *= invpsd
+            slc = slice(self._kin[det], self._kmax[det])
+            #self._current_wfs = None
             # get the various gated inner products
-            hpd = hp[slc].inner(gated_d[slc]).real  # <hp, d>
-            hcd = hc[slc].inner(gated_d[slc]).real  # <hc, d>
-            dhp = d[slc].inner(gated_hp[slc]).real  # <d, hp>
-            dhc = d[slc].inner(gated_hc[slc]).real  # <d, hc>
-            hphp = hp[slc].inner(gated_hp[slc]).real  # <hp, hp>
-            hchc = hc[slc].inner(gated_hc[slc]).real  # <hc, hc>
-            hphc = hp[slc].inner(gated_hc[slc]).real  # <hp, hc>
-            hchp = hc[slc].inner(gated_hp[slc]).real  # <hc, hp>
-            dd = d[slc].inner(gated_d[slc]).real  # <d, d>)
-            # sum up; note that the factor is 2df instead of 4df to account
-            # for the factor of 1/2
-            loglr += norm + 2*invpsd.delta_f*(hd - hh)
-            lognl += -2 * invpsd.delta_f * dd
+            dh = d[slc].inner(gated_h[slc]).real  # <d, Fh>
+            hd = h[slc].inner(gated_d[slc]).real  # <h, Fd>
+            hh = h[slc].inner(gated_h[slc]).real  # <h, Fh>
+            dd = d[slc].inner(gated_d[slc]).real  # <d, Fd>
+            # store
+            hh += hh_i
+            hd += hd_i
+        self._current_stats.maxl_phase = numpy.angle(hd)
+        return marginalize_likelihood(hd, hh, phase=True)
         # store the maxl polarization
         idx = loglr.argmax()
-        setattr(self._current_stats, 'maxl_phase', self.pol[idx])
+        setattr(self._current_stats, 'maxl_polarization', self.pol[idx])
         setattr(self._current_stats, 'maxl_logl', loglr[idx] + lognl)
         # compute the marginalized log likelihood
         marglogl = special.logsumexp(loglr) + lognl - numpy.log(len(self.pol))
