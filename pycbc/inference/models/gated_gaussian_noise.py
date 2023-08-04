@@ -839,11 +839,6 @@ class GatedGaussianMargAmpPhase(BaseGatedGaussian):
             out[det] = tuple(pols)
         return out
 
-    @property
-    def _extra_stats(self):
-        """Adds the maxL polarization and corresponding likelihood."""
-        return ['maxl_polarization', 'maxl_logl']
-
     def _loglikelihood(self):
         r"""Computes the log likelihood after removing the power within the
         given time window,
@@ -924,8 +919,6 @@ class GatedGaussianMargAmpPhase(BaseGatedGaussian):
             lognl += -2 * invpsd.delta_f * dd
         # store the maxl polarization
         idx = loglr.argmax()
-        setattr(self._current_stats, 'maxl_polarization', self.pol[idx])
-        setattr(self._current_stats, 'maxl_logl', loglr[idx] + lognl)
         # compute the marginalized log likelihood
         marglogl = special.logsumexp(loglr) + lognl - numpy.log(len(self.pol))
         return float(marglogl)
