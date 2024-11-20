@@ -409,8 +409,8 @@ class JobSegmenter(object):
         if len(valid_lengths) == 1:
             return data_lengths[0], valid_chunks[0], valid_lengths[0]
         else:
-            # Pick the tile size that is closest to 1/3 of the science segment
-            target_size = seg_size / 3
+            # Pick the tile size that is closest to 1/2 of the science segment
+            target_size = seg_size / 2
             pick, pick_diff = 0, abs(valid_lengths[0] - target_size)
             for i, size in enumerate(valid_lengths):
                 if abs(size - target_size) < pick_diff:
