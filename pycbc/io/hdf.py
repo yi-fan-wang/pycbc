@@ -1194,8 +1194,8 @@ class ForegroundTriggers(object):
             else:
                 coinc_event_vals[name] = self.get_coincfile_array(name)
 
-        sngl_col_names = ['snr', 'chisq', 'chisq_dof', 'bank_chisq',
-                          'bank_chisq_dof', 'cont_chisq', 'cont_chisq_dof',
+        sngl_col_names = ['snr', 'chisq', 'chisq_dof', 
+                          #'bank_chisq','bank_chisq_dof', 'cont_chisq', 'cont_chisq_dof',
                           'end_time', 'template_duration', 'coa_phase',
                           'sigmasq']
         sngl_col_vals = {}
