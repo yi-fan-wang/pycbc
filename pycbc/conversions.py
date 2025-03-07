@@ -44,6 +44,7 @@ from .coordinates import (
 
 pykerr = pycbc.libutils.import_optional('pykerr')
 lalsim = pycbc.libutils.import_optional('lalsimulation')
+postmerger = pycbc.libutils.import_optional('postmerger')
 
 logger = logging.getLogger('pycbc.conversions')
 
@@ -1611,6 +1612,71 @@ def final_spin_from_initial(mass1, mass2, spin1x=0., spin1y=0., spin1z=0.,
                                   spin2x, spin2y, spin2z, approximant,
                                   f_ref=f_ref)[1]
 
+def final_mass_from_postmerger(mass1, mass2, spin1z, spin2z):
+    """Returns the post-merger final mass of the black hole.
+
+    Parameters
+    ----------
+    mass1 : float
+        The mass of one of the components, in solar masses.
+    mass2 : float
+        The mass of the other component, in solar masses.
+    spin1z : float
+        The dimensionless z-component of the spin of mass1.
+    spin2z : float
+        The dimensionless z-component of the spin of mass2.
+
+    Returns
+    -------
+    float
+        The final mass, in solar masses.
+    """
+    return postmerger.final_mass(mass1, mass2, spin1z, spin2z, aligned_spins=True)
+
+def final_spin_from_postmerger(mass1, mass2, spin1z, spin2z):
+    """Returns the post-merger final spin of the black hole.
+
+    Parameters
+    ----------
+    mass1 : float
+        The mass of one of the components, in solar masses.
+    mass2 : float
+        The mass of the other component, in solar masses.
+    spin1z : float
+        The dimensionless z-component of the spin of mass1.
+    spin2z : float
+        The dimensionless z-component of the spin of mass2.
+
+    Returns
+    -------
+    float
+        The dimensionless final spin.
+    """
+    return postmerger.final_spin(mass1, mass2, spin1z, spin2z, aligned_spins=True)
+
+_fit = postmerger.load_fit('3dq8_20M')
+
+def ringdown_amplitude_from_postmerger(mass1, mass2, spin1z, spin2z, \
+                                    l, m, n, distance=None, start_time = 10):
+    '''Calculate the ringdown amplitude for the given masses and spins.
+    '''
+    q = q_from_mass1_mass2(mass1, mass2)
+    amplitude = _fit.predict_amp(q, spin1z, spin2z, (l,m), (l,m,n), return_std=False, start_time=start_time)
+  
+    if l == 2 and m == 2 and n == 0:
+        assert distance is not None, "Distance must be provided for l=m=2, n=0"
+        final_mass = final_mass_from_postmerger(mass1, mass2, spin1z, spin2z)
+        amplitude *= final_mass * lal.MRSUN_SI / distance / 1e6 / lal.PC_SI
+    
+    return amplitude
+
+def ringdown_phase_from_postmerger(mass1, mass2, spin1z, spin2z, \
+                                    l, m, n, start_time = 10):
+    '''Calculate the ringdown phase for the given masses and spins.
+    '''
+    q = q_from_mass1_mass2(mass1, mass2)
+    phase = _fit.predict_phase(q, spin1z, spin2z, (l,m), (l,m,n), return_std=False, start_time=start_time)
+    return phase
 
 #
 # =============================================================================
@@ -1845,6 +1911,8 @@ __all__ = ['dquadmon_from_lambda', 'lambda_tilde',
            'chi_eff_from_spherical', 'chi_p_from_spherical',
            'nltides_gw_phase_diff_isco', 'spin_from_pulsar_freq',
            'freqlmn_from_other_lmn', 'taulmn_from_other_lmn',
+           'final_mass_from_postmerger', 'final_spin_from_postmerger',
+           'ringdown_amplitude_from_postmerger', 'ringdown_phase_from_postmerger',
            'remnant_mass_from_mass1_mass2_spherical_spin_eos',
            'remnant_mass_from_mass1_mass2_cartesian_spin_eos',
            'lambda1_from_delta_lambda_tilde_lambda_tilde',

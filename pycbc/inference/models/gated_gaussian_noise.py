@@ -446,7 +446,7 @@ class BaseGatedGaussian(BaseGaussianNoise):
             by group, i.e., to ``fp[group].attrs``. Otherwise, metadata is
             written to the top-level attrs (``fp.attrs``).
         """
-        BaseDataModel.write_metadata(self, fp)
+        BaseDataModel.write_metadata(self, fp, group=group)
         attrs = fp.getattrs(group=group)
         # write the analyzed detectors and times
         attrs['analyzed_detectors'] = self.detectors

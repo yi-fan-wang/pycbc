@@ -227,7 +227,7 @@ class HierarchicalModel(BaseModel):
             sampattrs = fp.getattrs(group=fp.samples_group)
             lognl = [self.submodels[k].lognl for k in self.submodels]
             sampattrs['{}lognl'.format(prefix)] = sum(lognl)
-        except AttributeError:
+        except (AttributeError, ValueError):
             pass
 
     @classmethod
