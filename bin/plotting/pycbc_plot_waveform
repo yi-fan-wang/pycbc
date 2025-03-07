@@ -152,7 +152,7 @@ ax.set_xlim([template_td.sample_times.max() - tmplt_length*1.1,
 ax.set_xlabel('Time (s)')
 ax.set_ylabel('$h(t)$')
 
-if tmplt_length > 1.:
+if tmplt_length > 100:
     # Make inset zoom on merger
     axins = zoomed_inset_axes(ax, 0.5, loc=3,bbox_to_anchor=(0.12, 0.69),
                               bbox_transform=ax.figure.transFigure)
