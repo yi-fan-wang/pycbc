@@ -581,7 +581,8 @@ def td_damped_sinusoid(f_0, tau, amp, phi, times,
     # we measure things as deviations from circular polarization, which occurs
     # when h_{l-m} = (-1)^l h_{lm}^*; that implies that
     # phi_{l-m} = - phi_{lm} and A_{l-m} = (-1)^l A_{lm}
-    omegalm = two_pi * f_0 * times
+    omegalm = -two_pi * f_0 * times
+    phi *= -1
     damping = -times/tau
     # check for negative times
     mask = times < 0
@@ -589,7 +590,7 @@ def td_damped_sinusoid(f_0, tau, amp, phi, times,
         damping[mask] = 10*times[mask]/tau
     if m == 0:
         # no -m, just calculate
-        hlm = xlm * amp * numpy.exp(damping + 1j*(omegalm + phi))
+        hlm = xlm * amp * numpy.exp(damping - 1j*(omegalm + phi))
     else:
         # amplitude
         if dbeta == 0:
@@ -602,7 +603,7 @@ def td_damped_sinusoid(f_0, tau, amp, phi, times,
         phinm = l*pi + dphi - phi
         hlm = xlm * alm * numpy.exp(damping + 1j*(omegalm + phi)) \
             + xlnm * alnm * numpy.exp(damping - 1j*(omegalm - phinm))
-    return hlm.real, hlm.imag
+    return hlm.real, -hlm.imag
 
 
 def fd_damped_sinusoid(f_0, tau, amp, phi, freqs, t_0=0.,
