@@ -1868,6 +1868,85 @@ def nltides_gw_phase_diff_isco(f_low, f0, amplitude, n, m1, m2):
 
     return formatreturn(phi_i - phi_l, input_is_array)
 
+#
+# =============================================================================
+#
+#                         postmerger functions
+#
+# =============================================================================
+#
+
+#def t22offset_from_nrsur7dq4(mass1, mass2, spin1z, spin2z):
+#    import pycbc.waveform
+#    hlm = pycbc.waveform.get_td_waveform_modes(approximant='NRSur7dq4', f_lower=20, delta_t = 1./2048, mass1=mass1, mass2=mass2, spin1z=spin1z, spin2z=spin2z, mode=[(2,2)])
+#    h22 = hlm[(2,2)][0] + 1j*hlm[(2,2)][1]
+#    t22peak = h22.sample_times[numpy.argmax(abs(h22))]
+#    return t22peak
+
+import postmerger
+fitname = '3dq8_20M'
+fit = postmerger.load_fit(fitname)
+
+def final_mass_from_postmerger(mass1, mass2, spin1z, spin2z):
+    return postmerger.final_mass(mass1, mass2, spin1z, spin2z, aligned_spins=True)
+
+def final_spin_from_postmerger(mass1, mass2, spin1z, spin2z):
+    return postmerger.final_spin(mass1, mass2, spin1z, spin2z, aligned_spins=True)
+
+def ringdown_amp220_from_postmerger(mass1, mass2, spin1z, spin2z, distance, start_time):
+    import lal
+    q = q_from_mass1_mass2(mass1, mass2)
+    mtotal = mass1 + mass2
+    amp220 = fit.predict_amp(q, spin1z, spin2z, (2,2), (2,2,0), start_time)[0]
+    amp220 *= mtotal * lal.MRSUN_SI / distance / 1e6 / lal.PC_SI
+    return amp220
+
+def ringdown_relamp_from_postmerger(q, spin1z, spin2z, start_time, lm, lmn):
+    relamp = fit.predict(q, spin1z, spin2z, lm, lmn, start_time)[0]
+    return relamp
+
+import scipy.interpolate
+import pycbc.waveform
+
+def ringdown_phi220_and_t22offset_from_imr(mass1, mass2, spin1z, spin2z, phy_start_time):
+    hlm = pycbc.waveform.get_td_waveform_modes(approximant='NRSur7dq4',
+                                               f_lower=20,
+                                               f_ref = 20,
+                                               delta_t = 1./4096,
+                                               mass1=mass1,
+                                               mass2=mass2,
+                                               spin1z=spin1z,
+                                               spin2z=spin2z,
+                                               mode=[(2,2)])
+    h22 = hlm[(2,2)][0] + 1j * hlm[(2,2)][1]
+    t22peak_time = h22.sample_times[numpy.argmax(abs(h22))]
+    interp_h22 = scipy.interpolate.interp1d(h22.sample_times, np.unwrap(np.angle(h22.data)))
+    ringdown_phi22 = -interp_h22(phy_start_time) % (2 * numpy.pi) 
+    return ringdown_phi22, t22peak_time
+
+def ringdown_phi330_from_postmerger_imr(mass1, mass2, spin1z, spin2z, phase_220, start_time, phy_start_time):
+    hlm = pycbc.waveform.get_td_waveform_modes(approximant='NRSur7dq4',
+                                               f_lower=20,
+                                               f_ref = 20,
+                                               delta_t = 1./4096,
+                                               mass1=mass1,
+                                               mass2=mass2,
+                                               spin1z=spin1z,
+                                               spin2z=spin2z,
+                                               mode=[(3,3)])
+    h33 = hlm[(3,3)][0] + 1j * hlm[(3,3)][1]
+    interp_h33 = scipy.interpolate.interp1d(h33.sample_times, np.unwrap(np.angle(h33.data)))
+    inform_phi33 = -interp_h33(phy_start_time) % (2 * numpy.pi)
+
+    q = mass1/mass2
+    phase = fit.predict_phase(q, spin1z, spin2z, (3,3), (3,3,0), start_time=start_time)[0]
+    m = 3
+    phase += m/2 * phase_220 + m * numpy.pi / 2 + numpy.pi
+    phase = phase % (numpy.pi)
+
+    if inform_phi33 > numpy.pi:
+        phase += numpy.pi
+    return phase
 
 __all__ = ['dquadmon_from_lambda', 'lambda_tilde',
            'lambda_from_mass_tov_file', 'primary_mass',
@@ -1909,5 +1988,8 @@ __all__ = ['dquadmon_from_lambda', 'lambda_tilde',
            'remnant_mass_from_mass1_mass2_cartesian_spin_eos',
            'lambda1_from_delta_lambda_tilde_lambda_tilde',
            'lambda2_from_delta_lambda_tilde_lambda_tilde',
-           'delta_lambda_tilde', 'hypertriangle'
+           'delta_lambda_tilde', 'hypertriangle',
+           'final_mass_from_postmerger', 'final_spin_from_postmerger',
+           'ringdown_amp220_from_postmerger','ringdown_relamp_from_postmerger',
+           'ringdown_phi220_and_t22offset_from_imr', 'ringdown_phi330_from_postmerger_imr'
           ]
