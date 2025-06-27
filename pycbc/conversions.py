@@ -1877,22 +1877,14 @@ def nltides_gw_phase_diff_isco(f_low, f0, amplitude, n, m1, m2):
 # =============================================================================
 #
 
-#def t22offset_from_nrsur7dq4(mass1, mass2, spin1z, spin2z):
-#    import pycbc.waveform
-#    hlm = pycbc.waveform.get_td_waveform_modes(approximant='NRSur7dq4', f_lower=20, delta_t = 1./2048, mass1=mass1, mass2=mass2, spin1z=spin1z, spin2z=spin2z, mode=[(2,2)])
-#    h22 = hlm[(2,2)][0] + 1j*hlm[(2,2)][1]
-#    t22peak = h22.sample_times[numpy.argmax(abs(h22))]
-#    return t22peak
-
-
 def final_mass_from_postmerger(mass1, mass2, spin1z, spin2z):
     return postmerger.final_mass(mass1, mass2, spin1z, spin2z, aligned_spins=True)
 
 def final_spin_from_postmerger(mass1, mass2, spin1z, spin2z):
     return postmerger.final_spin(mass1, mass2, spin1z, spin2z, aligned_spins=True)
 
+fit = postmerger.load_fit('3dq8_20M')
 def ringdown_amp220_from_postmerger(mass1, mass2, spin1z, spin2z, distance, start_time):
-    fit = postmerger.load_fit('3dq8_20M')
     q = q_from_mass1_mass2(mass1, mass2)
     mtotal = mass1 + mass2
     amp220 = fit.predict_amp(q, spin1z, spin2z, (2,2), (2,2,0), start_time)[0]
@@ -1900,54 +1892,114 @@ def ringdown_amp220_from_postmerger(mass1, mass2, spin1z, spin2z, distance, star
     return amp220
 
 def ringdown_relamp_from_postmerger(q, spin1z, spin2z, start_time, lm, lmn):
-    fit = postmerger.load_fit('3dq8_20M')
-    relamp = fit.predict(q, spin1z, spin2z, lm, lmn, start_time)[0]
+    relamp = fit.predict_amp(q, spin1z, spin2z, lm, lmn, start_time)[0]
     return relamp
 
-def ringdown_phi220_and_t22offset_from_imr(mass1, mass2, spin1z, spin2z, phy_start_time):
+def ringdown_phi220_and_t22offset_from_imr(mass1, mass2, spin1z, spin2z, start_time):
     import scipy.interpolate
     import pycbc.waveform
-    hlm = pycbc.waveform.get_td_waveform_modes(approximant='NRSur7dq4',
-                                               f_lower=20,
-                                               f_ref = 20,
-                                               delta_t = 1./4096,
-                                               mass1=mass1,
-                                               mass2=mass2,
-                                               spin1z=spin1z,
-                                               spin2z=spin2z,
-                                               mode=[(2,2)])
-    h22 = hlm[(2,2)][0] + 1j * hlm[(2,2)][1]
-    t22peak_time = h22.sample_times[numpy.argmax(abs(h22))]
-    interp_h22 = scipy.interpolate.interp1d(h22.sample_times, np.unwrap(np.angle(h22.data)))
-    ringdown_phi22 = -interp_h22(phy_start_time) % (2 * numpy.pi) 
-    return ringdown_phi22, t22peak_time
+    args = (mass1, mass2, spin1z, spin2z, start_time)
+    args = ensurearray(*args)
+    input_is_array = args[-1]
+    origshape = args[0].shape
+    # flatten inputs for storing results
+    args = [a.ravel() for a in args[:-1]]
+    mass1, mass2, spin1z, spin2z, start_time = args
+    
+    ringdown_phi22 = numpy.full(mass1.shape, numpy.nan)
+    t22peak_time = numpy.full(mass1.shape, numpy.nan)
+    phy_start_time = numpy.full(mass1.shape, numpy.nan)
+    for ii in range(ringdown_phi22.size):
+        m1 = float(mass1[ii])
+        m2 = float(mass2[ii])
+        s1z = float(spin1z[ii])
+        s2z = float(spin2z[ii])
+        st = float(start_time[ii])
+
+        try:
+            hlm = pycbc.waveform.get_td_waveform_modes(approximant='NRSur7dq4',
+                                                f_lower=20,
+                                                f_ref = 20,
+                                                delta_t = 1./4096,
+                                                mass1=m1,
+                                                mass2=m2,
+                                                spin1z=s1z,
+                                                spin2z=s2z,
+                                                mode=[(2,2)])
+        except RuntimeError:
+            print("Error generating waveform modes for mass1={0}, mass2={1}, spin1z={2}, spin2z={3} for phi220".format(m1,m2,s1z,s2z))
+            ringdown_phi22[ii] = 0
+            t22peak_time[ii] = 0
+            phy_start_time[ii] = 0
+            continue
+        
+        h22 = hlm[(2,2)][0] + 1j * hlm[(2,2)][1]
+        t22peak_time[ii] = h22.sample_times[numpy.argmax(abs(h22))]
+        phy_start_time[ii] = st * (m1 + m2) * lal.MTSUN_SI + t22peak_time[ii]
+
+        interp_h22 = scipy.interpolate.interp1d(h22.sample_times, numpy.unwrap(numpy.angle(h22.data)))
+        ringdown_phi22[ii] = -interp_h22(phy_start_time[ii]) % (2 * numpy.pi) 
+    ringdown_phi22 = ringdown_phi22.reshape(origshape)
+    t22peak_time = t22peak_time.reshape(origshape)
+    phy_start_time = phy_start_time.reshape(origshape)
+    return formatreturn(ringdown_phi22, input_is_array), \
+            formatreturn(t22peak_time, input_is_array), \
+            formatreturn(phy_start_time, input_is_array)
 
 def ringdown_phi330_from_postmerger_imr(mass1, mass2, spin1z, spin2z, phase_220, start_time, phy_start_time):
     import scipy.interpolate
     import pycbc.waveform
-    hlm = pycbc.waveform.get_td_waveform_modes(approximant='NRSur7dq4',
-                                               f_lower=20,
-                                               f_ref = 20,
-                                               delta_t = 1./4096,
-                                               mass1=mass1,
-                                               mass2=mass2,
-                                               spin1z=spin1z,
-                                               spin2z=spin2z,
-                                               mode=[(3,3)])
-    h33 = hlm[(3,3)][0] + 1j * hlm[(3,3)][1]
-    interp_h33 = scipy.interpolate.interp1d(h33.sample_times, np.unwrap(np.angle(h33.data)))
-    inform_phi33 = -interp_h33(phy_start_time) % (2 * numpy.pi)
 
     fit = postmerger.load_fit('3dq8_20M')
-    q = mass1/mass2
-    phase = fit.predict_phase(q, spin1z, spin2z, (3,3), (3,3,0), start_time=start_time)[0]
-    m = 3
-    phase += m/2 * phase_220 + m * numpy.pi / 2 + numpy.pi
-    phase = phase % (numpy.pi)
 
-    if inform_phi33 > numpy.pi:
-        phase += numpy.pi
-    return phase
+    args = (mass1, mass2, spin1z, spin2z, phase_220, start_time, phy_start_time)
+    args = ensurearray(*args)
+    input_is_array = args[-1]
+    origshape = args[0].shape
+    # flatten inputs for storing results
+    args = [a.ravel() for a in args[:-1]]
+    mass1, mass2, spin1z, spin2z, phase_220, start_time, phy_start_time = args
+
+    phase = numpy.full(mass1.shape, numpy.nan)
+    for ii in range(phase.size):
+        m1 = float(mass1[ii])
+        m2 = float(mass2[ii])
+        s1z = float(spin1z[ii])
+        s2z = float(spin2z[ii])
+        phi220 = float(phase_220[ii])
+        st = float(start_time[ii])
+        phy_st = float(phy_start_time[ii])
+        try:
+            hlm = pycbc.waveform.get_td_waveform_modes(approximant='NRSur7dq4',
+                                                    f_lower=20,
+                                                    f_ref = 20,
+                                                    delta_t = 1./4096,
+                                                    mass1=m1,
+                                                    mass2=m2,
+                                                    spin1z=s1z,
+                                                    spin2z=s2z,
+                                                    mode=[(3,3)])
+        except RuntimeError:
+            print("Error generating waveform modes for mass1={0}, mass2={1}, spin1z={2}, spin2z={3} for phi330".format(
+                m1, m2, s1z, s2z))
+            phase[ii] = 0
+            continue
+
+        h33 = hlm[(3,3)][0] + 1j * hlm[(3,3)][1]
+        interp_h33 = scipy.interpolate.interp1d(h33.sample_times, numpy.unwrap(numpy.angle(h33.data)))
+        inform_phi33 = -interp_h33(phy_st) % (2 * numpy.pi)
+
+        q = m1 / m2
+        phase[ii] = fit.predict_phase(q, s1z, s2z, (3,3), (3,3,0), start_time=st)[0]
+        m = 3
+        phase[ii] += m/2 * phi220 + m * numpy.pi / 2 + numpy.pi
+        phase[ii] %= numpy.pi
+
+        if inform_phi33 > numpy.pi:
+            phase[ii] += numpy.pi
+
+    phase = phase.reshape(origshape)
+    return formatreturn(phase, input_is_array)
 
 __all__ = ['dquadmon_from_lambda', 'lambda_tilde',
            'lambda_from_mass_tov_file', 'primary_mass',
