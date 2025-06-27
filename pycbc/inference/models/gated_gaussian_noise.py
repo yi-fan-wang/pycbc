@@ -399,6 +399,11 @@ class BaseGatedGaussian(BaseGaussianNoise):
         ra = self.current_params['ra']
         dec = self.current_params['dec']
         # try to get from cache
+        if isinstance(gatestart, numpy.ndarray) and gatestart.size == 1:
+            gatestart = float(gatestart)
+        if isinstance(gateend, numpy.ndarray) and gateend.size == 1:
+            gateend = float(gateend)
+
         try:
             gatetimes = self._gatetimes[gatestart, gateend, ra, dec]
         except KeyError:
