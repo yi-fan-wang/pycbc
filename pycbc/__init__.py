@@ -148,8 +148,12 @@ def init_logging(verbose=False, default_level=0, to_file=None,
         handler = logging.FileHandler(to_file, mode='w')
     else:
         handler = logging.StreamHandler()
-    logger.addHandler(handler)
-    handler.setFormatter(LogFormatter(fmt=format))
+    #logger.addHandler(handler)
+    #handler.setFormatter(LogFormatter(fmt=format))
+    logger.handlers.clear() # Clear existing handlers
+    logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
 
 
 def makedir(path):
