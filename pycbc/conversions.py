@@ -1950,8 +1950,6 @@ def ringdown_phi330_from_postmerger_imr(mass1, mass2, spin1z, spin2z, phase_220,
     import scipy.interpolate
     import pycbc.waveform
 
-    fit = postmerger.load_fit('3dq8_20M')
-
     args = (mass1, mass2, spin1z, spin2z, phase_220, start_time, phy_start_time)
     args = ensurearray(*args)
     input_is_array = args[-1]
