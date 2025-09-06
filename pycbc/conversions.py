@@ -1892,8 +1892,15 @@ def ringdown_amp220_from_postmerger(mass1, mass2, spin1z, spin2z, distance, star
     return amp220
 
 def ringdown_relamp_from_postmerger(q, spin1z, spin2z, start_time, lm, lmn):
-    relamp = fit.predict_amp(q, spin1z, spin2z, lm, lmn, start_time)[0]
+    relamp = fit.predict_amp(q, spin1z, spin2z, lm, lmn, return_std=False, start_time=start_time)
     return relamp
+
+def ringdown_phase_from_postmerger(q, spin1z, spin2z, start_time, lm, lmn, phi220):
+    phase = fit.predict_phase(q, spin1z, spin2z, lm, lmn, False, start_time)
+    m = lm[1]
+    phase += m/2 * phi220 + m * numpy.pi / 2 + numpy.pi
+    phase %= 2 * numpy.pi
+    return phase
 
 def ringdown_phi220_and_t22offset_from_imr(mass1, mass2, spin1z, spin2z, start_time):
     import scipy.interpolate
@@ -1932,7 +1939,7 @@ def ringdown_phi220_and_t22offset_from_imr(mass1, mass2, spin1z, spin2z, start_t
             t22peak_time[ii] = 0
             phy_start_time[ii] = 0
             continue
-        
+
         h22 = hlm[(2,2)][0] + 1j * hlm[(2,2)][1]
         t22peak_time[ii] = h22.sample_times[numpy.argmax(abs(h22))]
         phy_start_time[ii] = st * (m1 + m2) * lal.MTSUN_SI + t22peak_time[ii]
@@ -2041,6 +2048,8 @@ __all__ = ['dquadmon_from_lambda', 'lambda_tilde',
            'lambda2_from_delta_lambda_tilde_lambda_tilde',
            'delta_lambda_tilde', 'hypertriangle',
            'final_mass_from_postmerger', 'final_spin_from_postmerger',
-           'ringdown_amp220_from_postmerger','ringdown_relamp_from_postmerger',
-           'ringdown_phi220_and_t22offset_from_imr', 'ringdown_phi330_from_postmerger_imr'
+           'ringdown_amp220_from_postmerger', 'ringdown_relamp_from_postmerger',
+           'ringdown_phase_from_postmerger',
+           'ringdown_phi220_and_t22offset_from_imr',
+           'ringdown_phi330_from_postmerger_imr'
           ]
