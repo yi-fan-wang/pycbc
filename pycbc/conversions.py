@@ -1252,12 +1252,22 @@ def get_lm_f0tau_allmodes(mass, spin, modes):
     """
     f0, tau = {}, {}
     for lmn in modes:
-        key = '{}{}{}'
-        l, m, nmodes = int(lmn[0]), int(lmn[1]), int(lmn[2])
-        for n in range(nmodes):
-            tmp_f0, tmp_tau = get_lm_f0tau(mass, spin, l, m, n)
-            f0[key.format(l, abs(m), n)] = tmp_f0
-            tau[key.format(l, abs(m), n)] = tmp_tau
+        if len(lmn) == 3:
+            key = '{}{}{}'
+            l, m, nmodes = int(lmn[0]), int(lmn[1]), int(lmn[2])
+            for n in range(nmodes):
+                tmp_f0, tmp_tau = get_lm_f0tau(mass, spin, l, m, n)
+                f0[key.format(l, abs(m), n)] = tmp_f0
+                tau[key.format(l, abs(m), n)] = tmp_tau
+        elif len(lmn) == 6:
+            l1, m1, n1 = int(lmn[0]), int(lmn[1]), int(lmn[2])
+            l2, m2, n2 = int(lmn[3]), int(lmn[4]), int(lmn[5])
+            f1, tau1 = get_lm_f0tau(mass, spin, l1, m1, n1)
+            f2, tau2 = get_lm_f0tau(mass, spin, l2, m2, n2)
+            f0[lmn] = f1 + f2
+            tau[lmn] = 1 / (1/tau1 + 1/tau2)
+        else:
+            raise ValueError(f'Invalid mode string {lmn}')
     return f0, tau
 
 
