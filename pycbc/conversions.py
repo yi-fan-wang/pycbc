@@ -1253,12 +1253,22 @@ def get_lm_f0tau_allmodes(mass, spin, modes):
     """
     f0, tau = {}, {}
     for lmn in modes:
-        key = '{}{}{}'
-        l, m, nmodes = int(lmn[0]), int(lmn[1]), int(lmn[2])
-        for n in range(nmodes):
-            tmp_f0, tmp_tau = get_lm_f0tau(mass, spin, l, m, n)
-            f0[key.format(l, abs(m), n)] = tmp_f0
-            tau[key.format(l, abs(m), n)] = tmp_tau
+        if len(lmn) == 3:
+            key = '{}{}{}'
+            l, m, nmodes = int(lmn[0]), int(lmn[1]), int(lmn[2])
+            for n in range(nmodes):
+                tmp_f0, tmp_tau = get_lm_f0tau(mass, spin, l, m, n)
+                f0[key.format(l, abs(m), n)] = tmp_f0
+                tau[key.format(l, abs(m), n)] = tmp_tau
+        elif len(lmn) == 6:
+            l1, m1, n1 = int(lmn[0]), int(lmn[1]), int(lmn[2])
+            l2, m2, n2 = int(lmn[3]), int(lmn[4]), int(lmn[5])
+            f1, tau1 = get_lm_f0tau(mass, spin, l1, m1, n1)
+            f2, tau2 = get_lm_f0tau(mass, spin, l2, m2, n2)
+            f0[lmn] = f1 + f2
+            tau[lmn] = 1 / (1/tau1 + 1/tau2)
+        else:
+            raise ValueError(f'Invalid mode string {lmn}')
     return f0, tau
 
 
@@ -1887,7 +1897,7 @@ fit = postmerger.load_fit('3dq8_20M')
 def ringdown_amp220_from_postmerger(mass1, mass2, spin1z, spin2z, distance, start_time):
     q = q_from_mass1_mass2(mass1, mass2)
     mtotal = mass1 + mass2
-    amp220 = fit.predict_amp(q, spin1z, spin2z, (2,2), (2,2,0), start_time)[0]
+    amp220 = fit.predict_amp(q, spin1z, spin2z, (2,2), (2,2,0), return_std=False, start_time=start_time)
     amp220 *= mtotal * lal.MRSUN_SI / distance / 1e6 / lal.PC_SI
     return amp220
 
@@ -1902,27 +1912,54 @@ def ringdown_phase_from_postmerger(q, spin1z, spin2z, start_time, lm, lmn, phi22
     phase %= 2 * numpy.pi
     return phase
 
-def ringdown_phi220_and_t22offset_from_imr(mass1, mass2, spin1z, spin2z, start_time):
+def ringdown_phi220_phystarttime_from_imr(mass1, mass2, spin1z, spin2z, start_time, include221=True):
+    """Calculate the phase of the (2,2,0) mode informed by the 
+    NRSur7dq4 model at the given start time, along with the physical 
+    start time. If include221 is True, the initial phase offset due 
+    to the (2,2,1) mode is included in the calculation.
+    Parameters
+    ----------
+    mass1 : float or array
+        The mass of one of the components, in solar masses.
+    mass2 : float or array
+        The mass of the other component, in solar masses.
+    spin1z : float or array
+        The dimensionless z-component of the spin of mass1.
+    spin2z : float or array
+        The dimensionless z-component of the spin of mass2.
+    start_time : float or array
+        The ringdown start time, in units of total mass
+    include221 : bool, optional
+        Whether to include the initial phase due to the (2,2,1)
+        mode. Default is True.
+    Returns
+    -------
+    ringdown_phi220 : float or array
+        The phase of the (2,2,0) mode at the start time, in radians
+    phy_start_time : float or array
+        The physical start time of the post-merger model, in seconds
+    """
     import scipy.interpolate
     import pycbc.waveform
+
     args = (mass1, mass2, spin1z, spin2z, start_time)
     args = ensurearray(*args)
+
     input_is_array = args[-1]
     origshape = args[0].shape
     # flatten inputs for storing results
     args = [a.ravel() for a in args[:-1]]
     mass1, mass2, spin1z, spin2z, start_time = args
     
-    ringdown_phi22 = numpy.full(mass1.shape, numpy.nan)
-    t22peak_time = numpy.full(mass1.shape, numpy.nan)
+    ringdown_phi220 = numpy.full(mass1.shape, numpy.nan)
     phy_start_time = numpy.full(mass1.shape, numpy.nan)
-    for ii in range(ringdown_phi22.size):
+    
+    for ii in range(ringdown_phi220.size):
         m1 = float(mass1[ii])
         m2 = float(mass2[ii])
         s1z = float(spin1z[ii])
         s2z = float(spin2z[ii])
         st = float(start_time[ii])
-
         try:
             hlm = pycbc.waveform.get_td_waveform_modes(approximant='NRSur7dq4',
                                                 f_lower=20,
@@ -1935,22 +1972,29 @@ def ringdown_phi220_and_t22offset_from_imr(mass1, mass2, spin1z, spin2z, start_t
                                                 mode=[(2,2)])
         except RuntimeError:
             print("Error generating waveform modes for mass1={0}, mass2={1}, spin1z={2}, spin2z={3} for phi220".format(m1,m2,s1z,s2z))
-            ringdown_phi22[ii] = 0
-            t22peak_time[ii] = 0
+            ringdown_phi220[ii] = 0
             phy_start_time[ii] = 0
             continue
 
         h22 = hlm[(2,2)][0] + 1j * hlm[(2,2)][1]
-        t22peak_time[ii] = h22.sample_times[numpy.argmax(abs(h22))]
-        phy_start_time[ii] = st * (m1 + m2) * lal.MTSUN_SI + t22peak_time[ii]
+        t22peak_time = h22.sample_times[numpy.argmax(abs(h22))]
+        phy_start_time[ii] = st * (m1 + m2) * lal.MTSUN_SI + t22peak_time
 
-        interp_h22 = scipy.interpolate.interp1d(h22.sample_times, numpy.unwrap(numpy.angle(h22.data)))
-        ringdown_phi22[ii] = -interp_h22(phy_start_time[ii]) % (2 * numpy.pi) 
-    ringdown_phi22 = ringdown_phi22.reshape(origshape)
-    t22peak_time = t22peak_time.reshape(origshape)
+        interp_h22phase = scipy.interpolate.interp1d(h22.sample_times, numpy.unwrap(numpy.angle(h22.data)))
+        if include221:
+            q = q_from_mass1_mass2(m1, m2)
+            rel_amp_221 = fit.predict_amp(q, s1z, s2z, (2,2), (2,2,1), return_std=False, start_time=start_time)
+            rel_phi_221 = fit.predict_phase(q, s1z, s2z, (2,2), (2,2,1), return_std=False, start_time=start_time)
+            initial_phase_22 = numpy.angle( 1 + rel_amp_221 * numpy.exp(-1j * rel_phi_221) )
+        else:
+            initial_phase_22 = 0
+
+        nr_phase22 = interp_h22phase(phy_start_time[ii])
+        ringdown_phi220[ii] = (initial_phase_22 - nr_phase22) % (2 * numpy.pi)
+
+    ringdown_phi220 = ringdown_phi220.reshape(origshape)
     phy_start_time = phy_start_time.reshape(origshape)
-    return formatreturn(ringdown_phi22, input_is_array), \
-            formatreturn(t22peak_time, input_is_array), \
+    return formatreturn(ringdown_phi220, input_is_array), \
             formatreturn(phy_start_time, input_is_array)
 
 def ringdown_phi330_from_postmerger_imr(mass1, mass2, spin1z, spin2z, phase_220, start_time, phy_start_time):
@@ -2050,6 +2094,6 @@ __all__ = ['dquadmon_from_lambda', 'lambda_tilde',
            'final_mass_from_postmerger', 'final_spin_from_postmerger',
            'ringdown_amp220_from_postmerger', 'ringdown_relamp_from_postmerger',
            'ringdown_phase_from_postmerger',
-           'ringdown_phi220_and_t22offset_from_imr',
+           'ringdown_phi220_phystarttime_from_imr',
            'ringdown_phi330_from_postmerger_imr'
           ]

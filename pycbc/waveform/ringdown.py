@@ -109,12 +109,13 @@ def format_lmns(lmns):
         # lmn = lmn.strip(" b'")
         # Try to convert to int and then str, to ensure the right format
         lmn = str(int(lmn))
-        if len(lmn) != 3:
+        if len(lmn) == 3:
+            if int(lmn[2]) == 0:
+                raise ValueError('Number of overtones (nmodes) must be greater '
+                                 'than zero in lmn={}.'.format(lmn))
+        elif len(lmn) != 6:
             raise ValueError('Format of parameter lmns not recognized. See '
                              'approximant documentation for more info.')
-        elif int(lmn[2]) == 0:
-            raise ValueError('Number of overtones (nmodes) must be greater '
-                             'than zero in lmn={}.'.format(lmn))
         out.append(lmn)
 
     return out
@@ -122,11 +123,17 @@ def format_lmns(lmns):
 def parse_mode(lmn):
     """Extracts overtones from an lmn.
     """
-    lm, nmodes = lmn[0:2], int(lmn[2])
-    overtones = []
-    for n in range(nmodes):
-        mode = lm + '{}'.format(n)
-        overtones.append(mode)
+    if len(lmn) == 6:
+        overtones = [lmn]
+    elif len(lmn) == 3:
+        lm, nmodes = lmn[0:2], int(lmn[2])
+        overtones = []
+        for n in range(nmodes):
+            mode = lm + '{}'.format(n)
+            overtones.append(mode)
+    else:
+        raise ValueError('Format of parameter lmns not recognized. See '
+                         'approximant documentation for more info.')
     return overtones
 
 
@@ -782,10 +789,22 @@ def multimode_base(input_params, domain, freq_tau_approximant=False):
         if amps[lmn] == 0.:
             # skip
             continue
+
+        if len(lmn) == 3:
+            l,m,n = int(lmn[0]), int(lmn[1]), int(lmn[2])
+        elif len(lmn) == 6:
+            l1,m1,n1 = int(lmn[0]), int(lmn[1]), int(lmn[2])
+            l2,m2,n2 = int(lmn[3]), int(lmn[4]), int(lmn[5])
+            l = l1 + l2
+            m = m1 + m2
+            n = n1 + n2
+        else:
+            raise ValueError('unrecognised lmn format {}'.format(lmn))
+
         if domain == 'td':
             hplus, hcross = td_damped_sinusoid(
                 freqs[lmn], taus[lmn], amps[lmn], phis[lmn], sample_times,
-                l=int(lmn[0]), m=int(lmn[1]), n=int(lmn[2]),
+                l=l, m=m, n=n,
                 inclination=input_params['inclination'],
                 azimuthal=input_params['azimuthal'],
                 dphi=dphis[lmn], dbeta=dbetas[lmn],
@@ -796,7 +815,7 @@ def multimode_base(input_params, domain, freq_tau_approximant=False):
         elif domain == 'fd':
             hplus, hcross = fd_damped_sinusoid(
                 freqs[lmn], taus[lmn], amps[lmn], phis[lmn], sample_freqs,
-                l=int(lmn[0]), m=int(lmn[1]), n=int(lmn[2]),
+                l=l, m=m, n=n,
                 inclination=input_params['inclination'],
                 azimuthal=input_params['azimuthal'],
                 harmonics=harmonics, final_spin=final_spin,
