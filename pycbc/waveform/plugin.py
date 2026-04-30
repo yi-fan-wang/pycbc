@@ -32,7 +32,7 @@ def add_custom_waveform(approximant, function, domain,
         if not force and (approximant in cpu_td):
             raise used
         cpu_td[approximant] = function
-        td_fd_waveform_transform(approximant)
+        #td_fd_waveform_transform(approximant)
     elif domain == 'frequency':
         if sequence:
             if not has_det_response:
