@@ -433,6 +433,12 @@ for num_event in range(num_events):
             curr_params['u_vals'] = hd_sngl.u_vals[0]
         except:
             pass
+        try:
+            # Only present for eccentric search
+            curr_params['eccentricity'] = hd_sngl.eccentricity[0]
+            curr_params['rel_anomaly'] = hd_sngl.rel_anomaly[0]
+        except (KeyError, ValueError):
+            pass
 
         curr_tags = ['TMPLT_PARAMS_%s' %(curr_ifo,)]
         curr_tags += [str(num_event)]
