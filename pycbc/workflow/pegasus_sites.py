@@ -22,6 +22,7 @@ from urllib.request import pathname2url
 
 from Pegasus.api import Directory, FileServer, Site, Operation, Namespace
 from Pegasus.api import Arch, OS, SiteCatalog
+from Pegasus.api import Grid, Scheduler, SupportedJobs
 
 from pycbc.version import last_release, version, release  # noqa
 
@@ -40,7 +41,7 @@ urllib.parse.uses_relative.append('gsiftp')
 urllib.parse.uses_netloc.append('gsiftp')
 
 KNOWN_SITES = ['local', 'condorpool_symlink',
-               'condorpool_copy', 'condorpool_shared', 'osg']
+               'condorpool_copy', 'condorpool_shared', 'osg', 'slurm']
 
 
 def add_site_pegasus_profile(site, cp):
@@ -182,6 +183,13 @@ def add_condorpool_shared_site(sitecat, cp, local_path, local_url):
                       value="True")
     site.add_profiles(Namespace.DAGMAN, key="retry", value="2")
     # Need to set PEGASUS_HOME
+    site.add_profiles(Namespace.ENV, key="PEGASUS_HOME",
+                      value=get_pegasus_home())
+    sitecat.add_sites(site)
+
+
+def get_pegasus_home():
+    """Locate the Pegasus installation prefix from the pegasus-plan command"""
     peg_home = which('pegasus-plan')
     if peg_home is None:
         raise RuntimeError(
@@ -193,8 +201,85 @@ def add_condorpool_shared_site(sitecat, cp, local_path, local_url):
             f'path to pegasus-plan is weird: {peg_home}. '
             'Make sure Pegasus is correctly installed.'
         )
-    peg_home = peg_home.replace('bin/pegasus-plan', '')
-    site.add_profiles(Namespace.ENV, key="PEGASUS_HOME", value=peg_home)
+    return peg_home.replace('bin/pegasus-plan', '')
+
+
+def add_slurm_site(sitecat, cp, local_path, local_url):
+    """Add a SLURM cluster site to the site catalog.
+
+    Jobs on this site are submitted to the local SLURM batch system
+    through HTCondor's grid universe and the blahp (the "glite" style
+    in Pegasus). This requires an HTCondor install (which provides the
+    blahp) on the workflow submit host, and assumes the submit host
+    shares a filesystem with the SLURM compute nodes.
+
+    The SLURM partition can be chosen with ``pycbc|partition`` and the
+    accounting project with ``pycbc|account`` in the
+    ``[pegasus_profile-slurm]`` section of the configuration file. Any
+    further sbatch directives can be supplied through the
+    ``pegasus|glite.arguments`` profile, and per-job resources through
+    the ``pegasus|cores``, ``pegasus|memory`` and ``pegasus|runtime``
+    profiles of each executable (the condor ``request_*`` profiles are
+    not translated into sbatch directives).
+    """
+    # local_url must end with a '/'
+    if not local_url.endswith('/'):
+        local_url = local_url + '/'
+
+    site = Site("slurm", arch=Arch.X86_64, os_type=OS.LINUX)
+    add_site_pegasus_profile(site, cp)
+
+    sec = 'pegasus_profile-slurm'
+
+    # The compute nodes are assumed to see the same filesystem as the
+    # submit host, so run in a shared scratch directory as for
+    # condorpool_shared.
+    site_dir = Directory(Directory.SHARED_SCRATCH,
+                         path=os.path.join(local_path,
+                                           'slurm-site-scratch'),
+                         shared_file_system=True)
+    site_file_serv = FileServer(urljoin(local_url, 'slurm-site-scratch'),
+                                Operation.ALL)
+    site_dir.add_file_servers(site_file_serv)
+    site.add_directories(site_dir)
+
+    # The contact string is not used for local batch submission via the
+    # blahp, but the site catalog schema requires one.
+    if cp.has_option(sec, 'pycbc|host'):
+        contact = cp.get(sec, 'pycbc|host')
+    else:
+        contact = 'localhost'
+    site.add_grids(
+        Grid(Grid.BATCH, contact, Scheduler.SLURM,
+             job_type=SupportedJobs.COMPUTE),
+        Grid(Grid.BATCH, contact, Scheduler.SLURM,
+             job_type=SupportedJobs.AUXILLARY)
+    )
+
+    site.add_profiles(Namespace.PEGASUS, key="style", value="glite")
+    site.add_profiles(Namespace.PEGASUS, key="data.configuration",
+                      value="sharedfs")
+    # Run transfer/create-dir/cleanup jobs on the submit host rather
+    # than through the queue
+    site.add_profiles(Namespace.PEGASUS, key='auxillary.local',
+                      value="true")
+    site.add_profiles(Namespace.DAGMAN, key="retry", value="2")
+
+    # Convenience options for common sbatch settings. The queue profile
+    # becomes 'batch_queue' (sbatch --partition) and the project profile
+    # becomes 'batch_project' (sbatch --account) in the generated grid
+    # universe submit file.
+    if cp.has_option(sec, 'pycbc|partition'):
+        site.add_profiles(Namespace.PEGASUS, key="queue",
+                          value=cp.get(sec, 'pycbc|partition'))
+    if cp.has_option(sec, 'pycbc|account'):
+        site.add_profiles(Namespace.PEGASUS, key="project",
+                          value=cp.get(sec, 'pycbc|account'))
+
+    # The blahp-generated batch script does not source the user's
+    # environment, so kickstart must be locatable through PEGASUS_HOME
+    site.add_profiles(Namespace.ENV, key="PEGASUS_HOME",
+                      value=get_pegasus_home())
     sitecat.add_sites(site)
 
 
@@ -279,6 +364,8 @@ def add_site(sitecat, sitename, cp, out_dir=None):
         add_condorpool_shared_site(sitecat, cp, out_dir, local_url)
     elif sitename == 'osg':
         add_osg_site(sitecat, cp)
+    elif sitename == 'slurm':
+        add_slurm_site(sitecat, cp, out_dir, local_url)
     else:
         raise ValueError("Do not recognize site {}".format(sitename))
 

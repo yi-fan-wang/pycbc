@@ -768,7 +768,7 @@ class Workflow(pegasus_workflow.Workflow):
         """Site to use for staging to/from each site"""
         staging_site = {}
         for site in self.sites:
-            if site in ['condorpool_shared']:
+            if site in ['condorpool_shared', 'slurm']:
                 staging_site[site] = site
             else:
                 staging_site[site] = 'local'

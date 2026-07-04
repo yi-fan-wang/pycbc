@@ -767,7 +767,7 @@ def convert_cachelist_to_filelist(datafindcache_list):
                 # Be careful here! If all your frames files are on site
                 # = local and you try to run on OSG, it will likely
                 # overwhelm the condor file transfer process!
-                for site in ['local', 'condorpool_shared']:
+                for site in ['local', 'condorpool_shared', 'slurm']:
                     currFile.add_pfn(frame.url, site=site)
             else:
                 # Frame is at some unknown URL. Pegasus will decide how to deal
