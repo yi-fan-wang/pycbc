@@ -115,6 +115,18 @@ Determine if "triggers" seen in one detector are also seen in other detectors. A
 
    workflow/hdf_coincidence
 
+----------------------------------
+Running on SLURM clusters
+----------------------------------
+
+How to run PyCBC workflows on clusters that use the SLURM batch scheduler,
+using Pegasus' glite/batch submission style.
+
+.. toctree::
+   :maxdepth: 1
+
+   workflow/pegasus_slurm
+
 ====================
 Method documentation
 ====================
