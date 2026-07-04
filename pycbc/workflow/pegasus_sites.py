@@ -249,14 +249,24 @@ def add_slurm_site(sitecat, cp, local_path, local_url):
         contact = cp.get(sec, 'pycbc|host')
     else:
         contact = 'localhost'
+    # Declare a gateway for every job type: even with auxillary.local
+    # set, Pegasus maps some jobs (e.g. the remote worker-package
+    # staging job) to this site, and the glite style refuses any job
+    # whose type has no gateway to derive grid_resource from
     site.add_grids(
-        Grid(Grid.BATCH, contact, Scheduler.SLURM,
-             job_type=SupportedJobs.COMPUTE),
-        Grid(Grid.BATCH, contact, Scheduler.SLURM,
-             job_type=SupportedJobs.AUXILLARY)
+        *[Grid(Grid.BATCH, contact, Scheduler.SLURM, job_type=job_type)
+          for job_type in (SupportedJobs.COMPUTE,
+                           SupportedJobs.AUXILLARY,
+                           SupportedJobs.TRANSFER,
+                           SupportedJobs.REGISTER,
+                           SupportedJobs.CLEANUP)]
     )
 
     site.add_profiles(Namespace.PEGASUS, key="style", value="glite")
+    # Pegasus <= 5.1.2 does not derive grid_resource from the grid
+    # gateways above, so set it explicitly on every job of this site
+    site.add_profiles(Namespace.CONDOR, key="grid_resource",
+                      value="batch slurm")
     site.add_profiles(Namespace.PEGASUS, key="data.configuration",
                       value="sharedfs")
     # Run transfer/create-dir/cleanup jobs on the submit host rather
