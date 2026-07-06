@@ -48,6 +48,14 @@ Requirements
   blahp's glite directory, which is what turns job requirements (walltime,
   memory, extra arguments, ...) into ``#SBATCH`` directives. Without this
   step jobs will still run, but resource requests will be silently ignored.
+* Generate **and start** the workflow from a shell in which your PyCBC
+  environment is active. Hierarchical workflows re-run ``pegasus-plan`` at
+  runtime in the environment inherited from the submitting shell; with a
+  system-wide Pegasus install this invokes ``pegasus-db-admin`` with
+  whatever ``python3`` is first in the PATH, which must be able to import
+  ``sqlalchemy``. Starting the workflow from a clean shell without the
+  virtual environment typically fails the deferred planning stage with
+  ``ModuleNotFoundError: No module named 'sqlalchemy'``.
 
 =============
 Configuration
@@ -75,6 +83,22 @@ Individual executables can be kept off the cluster (for example, quick
 plotting jobs) by pinning them to the local site in their own section::
 
     [pegasus_profile-results_page]
+    pycbc|site = local
+
+Executables that generate sub-workflow dax files at runtime (in the
+offline search these are the minifollowup generators) **must** be pinned
+to the local site: Pegasus' deferred planning expects the generated dax
+files in the local site's scratch directory, but for a sharedfs site
+that stages to itself no transfer puts them there and the sub-workflow
+planning fails with ``Expected local file does not exist``::
+
+    [pegasus_profile-foreground_minifollowup]
+    pycbc|site = local
+
+    [pegasus_profile-singles_minifollowup]
+    pycbc|site = local
+
+    [pegasus_profile-injection_minifollowup]
     pycbc|site = local
 
 --------------------------
