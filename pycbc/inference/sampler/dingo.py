@@ -223,7 +223,15 @@ class DingoSampler(BaseSampler):
             td = numpy.fft.irfft(fd)
             td = td[:int(round(duration * sample_rate))]
             td *= tukey(len(td), 2 * self.window_roll_off / duration)
-            waveform[det] = numpy.fft.rfft(td)[:nbins]
+            strain = numpy.fft.rfft(td)[:nbins]
+            # Dingo expects the trigger at cyclic time zero of the segment
+            # (dingo.gw.data.data_preparation applies
+            # cyclic_time_shift(time_buffer) after windowing); rotate by the
+            # buffer time. This is a pure phase factor, applied after the
+            # window so that the taper stays on the physical segment edges.
+            strain *= numpy.exp(-2j * numpy.pi * domain_freqs
+                                * self.time_buffer)
+            waveform[det] = strain
             psd_freqs = numpy.arange(len(psd)) * float(psd.delta_f)
             asds[det] = numpy.interp(
                 domain_freqs, psd_freqs,
