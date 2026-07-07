@@ -216,7 +216,11 @@ class Array(object):
                 self._data = _to_device(initial_array) # pylint:disable=assignment-from-no-return
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-        inputs = [i.numpy() if isinstance(i, Array) else i for i in inputs]
+        # Operate on the backend data directly: on the CPU scheme _data is
+        # the numpy array itself, and on GPU schemes the ufunc dispatches to
+        # the device implementation, avoiding a host round-trip (and the
+        # copy=False failure in _return for a host-side result).
+        inputs = [i._data if isinstance(i, Array) else i for i in inputs]
         ret = getattr(ufunc, method)(*inputs, **kwargs)
         if hasattr(ret, 'shape') and ret.shape == self.shape:
             ret = self._return(ret)

@@ -93,5 +93,9 @@ def fd_sine_gaussian(amp, quality, central_frequency, fmin, fmax, delta_f):
         )
         v[kmin:high_freq_second_idx] *= (1 + numpy.exp(exp_term_2))
 
-    return pycbc.types.FrequencySeries(v, delta_f=delta_f, copy=False)
+    # v lives in host memory; under a non-CPU scheme the constructor must be
+    # allowed to copy it to the device, so only skip the copy on CPU.
+    import pycbc.scheme
+    zero_copy = isinstance(pycbc.scheme.mgr.state, pycbc.scheme.CPUScheme)
+    return pycbc.types.FrequencySeries(v, delta_f=delta_f, copy=not zero_copy)
 

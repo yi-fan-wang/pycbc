@@ -36,31 +36,31 @@ def ptr(self):
     return self.data.data.mem.ptr
 
 def dot(self, other):
-    return cp.dot(self._data,other)
+    return cp.dot(self._data,other).item()
 
 def min(self):
-    return self.data.min()
+    return self.data.min().item()
 
 def abs_max_loc(self):
     if self.kind == 'real':
         tmp = abs(self.data)
         ind = cp.argmax(tmp)
-        return tmp[ind], ind
+        return tmp[ind].item(), ind.item()
     else:
         tmp = self.data.real ** 2.0
         tmp += self.data.imag ** 2.0
         ind = cp.argmax(tmp)
-        return tmp[ind] ** 0.5, ind
+        return (tmp[ind] ** 0.5).item(), ind.item()
 
 def cumsum(self):
     return self.data.cumsum()
 
 def max(self):
-    return self.data.max()
+    return self.data.max().item()
 
 def max_loc(self):
     ind = cp.argmax(self.data)
-    return self.data[ind], ind
+    return self.data[ind].item(), ind.item()
 
 def take(self, indices):
     return self.data.take(indices)
@@ -77,27 +77,28 @@ def weighted_inner(self, other, weight):
     else:
         acum_dtype = float64
 
-    return cp.sum(self.data.conj() * other / weight, dtype=acum_dtype)
+    return cp.sum(self.data.conj() * other / weight, dtype=acum_dtype).item()
 
 def abs_arg_max(self):
     if self.dtype == cp.float32 or self.dtype == cp.float64:
-        return cp.argmax(abs(self.data))
+        return cp.argmax(abs(self.data)).item()
     else:
-        return abs_arg_max_complex(self._data)
+        # argmax of |z| == argmax of |z|^2; avoids the sqrt
+        return cp.argmax(self.data.real ** 2.0 + self.data.imag ** 2.0).item()
 
 def inner(self, other):
     """ Return the inner product of the array with complex conjugation.
     """
     cdtype = common_kind(self.dtype, other.dtype)
     if cdtype.kind == 'c':
-        return cp.sum(self.data.conj() * other, dtype=complex128)
+        return cp.sum(self.data.conj() * other, dtype=complex128).item()
     else:
-        return inner_real(self.data, other)
+        return cp.sum(self.data * other, dtype=float64).item()
 
 def vdot(self, other):
     """ Return the inner product of the array with complex conjugation.
     """
-    return cp.vdot(self.data, other)
+    return cp.vdot(self.data, other).item()
 
 def squared_norm(self):
     """ Return the elementwise squared norm of the array """
@@ -110,13 +111,13 @@ def _copy(self, self_ref, other_ref):
     self_ref[:] = other_ref[:]
 
 def _getvalue(self, index):
-    return self._data[index]
+    return self._data[index].item()
 
 def sum(self):
     if self.kind == 'real':
-        return cp.sum(self._data,dtype=float64)
+        return cp.sum(self._data,dtype=float64).item()
     else:
-        return cp.sum(self._data,dtype=complex128)
+        return cp.sum(self._data,dtype=complex128).item()
 
 def clear(self):
     self[:] = 0

@@ -183,13 +183,11 @@ def get_tkernel(slen, window):
 
     fn = cp.RawKernel(
         tkernel1.render(chunk=nt),
-        'threshold_and_cluster',
-        backend='nvcc'
+        'threshold_and_cluster'
     )
     fn2 = cp.RawKernel(
         tkernel2.render(blocks=nb),
-        'threshold_and_cluster2',
-        backend='nvcc'
+        'threshold_and_cluster2'
     )
     return (fn, fn2), nt, nb
 
@@ -212,7 +210,7 @@ def threshold_and_cluster(series, threshold, window):
     cl = loc[0:nb]
     cv = val[0:nb]
 
-    fn((nb,), (nt,), (series.data, outv, outl, window, threshold))
+    fn((nb,), (nt,), (series, outv, outl, window, threshold))
     fn2((1,), (nb,), (outv, outl, threshold, window))
     w = (cl != -1)
     return cv[w], cl[w]
@@ -240,14 +238,18 @@ class CUDAThresholdCluster(_BaseThresholdCluster):
         cl = loc[0:nb]
         cv = val[0:nb]
 
+        # RawKernel call signature is fn(grid, block, args): tkernel1 runs
+        # one block per clustering window (nb blocks of nt threads, the
+        # shared buffers are sized nt); tkernel2 reduces across the nb
+        # window candidates in a single block of nb threads.
         fn(
+            (nb, 1, 1),
             (nt, 1, 1),
-            (nb, 1),
             (self.series.data, self.outv, self.outl, window, threshold)
         )
         fn2(
+            (1, 1, 1),
             (nb, 1, 1),
-            (1, 1),
             (self.outv, self.outl, threshold, window)
         )
         w = (cl != -1)

@@ -45,7 +45,7 @@ def chisq_accum_bin(chisq, q):
 
 
 chisqkernel = Template("""
-#include <cstdint>
+typedef unsigned int uint32_t;  // NVRTC has no C++ stdlib headers
 extern "C" __global__ void power_chisq_at_points_${NP}(
                                       %if fuse:
                                           float2* htilde,
@@ -55,7 +55,7 @@ extern "C" __global__ void power_chisq_at_points_${NP}(
                                       %endif
                                       float2* outc, unsigned int N,
                                       %for p in range(NP):
-                                        float phase${p},
+                                        unsigned int points${p},
                                       %endfor
                                       uint32_t* kmin,
                                       uint32_t* kmax,
@@ -64,6 +64,10 @@ extern "C" __global__ void power_chisq_at_points_${NP}(
     __shared__ unsigned int s;
     __shared__ unsigned int e;
     __shared__ float2 chisq[${NT} * ${NP}];
+    float twopi = ${TWOPI};
+    unsigned long long NN;
+
+    NN = (unsigned long long) N;
 
     // load integration boundaries (might not be bin boundaries if bin is large)
     if (threadIdx.x == 0){
@@ -93,7 +97,13 @@ extern "C" __global__ void power_chisq_at_points_${NP}(
         %endif
 
         %for p in range(NP):
-            sincosf(phase${p} * i, &im, &re);
+            // exact phase reduction: points * i mod N stays in [0, 2 pi)
+            // (the fp32 evaluation of sincosf(phase * i) at large i loses
+            // the phase completely)
+            unsigned long long prod${p} = (unsigned long long) points${p} * i;
+            unsigned int k${p} = (unsigned int) (prod${p} % NN);
+            float phase${p} = twopi * k${p} / ((float) N);
+            sincosf(phase${p}, &im, &re);
             chisq[threadIdx.x + ${NT*p}].x += re * qt.x - im * qt.y;
             chisq[threadIdx.x + ${NT*p}].y += im * qt.x + re * qt.y;
         %endfor
@@ -127,7 +137,7 @@ extern "C" __global__ void power_chisq_at_points_${NP}(
 """)
 
 chisqkernel_pow2 = Template("""
-#include <cstdint>
+typedef unsigned int uint32_t;  // NVRTC has no C++ stdlib headers
 extern "C" __global__ void power_chisq_at_points_${NP}_pow2(
                                       %if fuse:
                                           float2* htilde,
@@ -220,8 +230,7 @@ def get_pchisq_fn(np, fuse_correlate=False):
     nt = 256
     fn = cp.RawKernel(
         chisqkernel.render(NT=nt, NP=np, fuse=fuse_correlate, **LALARGS),
-        f'power_chisq_at_points_{np}',
-        backend='nvcc'
+        f'power_chisq_at_points_{np}'
     )
     return fn, nt
 
@@ -231,8 +240,7 @@ def get_pchisq_fn_pow2(np, fuse_correlate=False):
     nt = 256
     fn = cp.RawKernel(
         chisqkernel_pow2.render(NT=nt, NP=np, fuse=fuse_correlate, **LALARGS),
-        f'power_chisq_at_points_{np}_pow2',
-        backend='nvcc'
+        f'power_chisq_at_points_{np}_pow2'
     )
     return fn, nt
 
@@ -255,28 +263,27 @@ def get_cached_bin_layout(bins):
     kmax = cp.array(kmax, dtype=cp.uint32)
     return kmin, kmax, bv
 
-def shift_sum_points(num, N, arg_tuple):
+def shift_sum_points(num, arg_tuple):
     #fuse = 'fuse' in corr.gpu_callback_method
     fuse = False
 
     fn, nt = get_pchisq_fn(num, fuse_correlate = fuse)
-    corr, outp, phase, np, nb, N, kmin, kmax, bv, nbins = arg_tuple
+    corr, outp, points, np, nb, N, kmin, kmax, bv, nbins = arg_tuple
     if fuse:
         args = [corr.htilde.data, corr.stilde.data]
     else:
         args = [corr.data]
-    args += [outp, N] + phase[0:num]
-    args += [kmin, kmax, bv, nbins]
+    args += [outp, N] + points[0:num] + [kmin, kmax, bv, nbins]
     fn(
         (nb,),
         (nt,),
-        *args,
+        tuple(args),
     )
-    
+
     outp = outp[num*nbins:]
-    phase = phase[num:]
+    points = points[num:]
     np -= num
-    return outp, phase, np
+    return outp, points, np
 
 def shift_sum_points_pow2(num, arg_tuple):
     #fuse = 'fuse' in corr.gpu_callback_method
@@ -329,18 +336,18 @@ def shift_sum(corr, points, bins):
             elif np == 1:
                 outp, lpoints, np = shift_sum_points_pow2(1, cargs)
     else:
-        phase = [numpy.float32(p * 2.0 * numpy.pi / N) for p in points]
+        lpoints = points.tolist()
         while np > 0:
-            cargs = (corr, outp, phase, np, nb, N, kmin, kmax, bv, nbins)
+            cargs = (corr, outp, lpoints, np, nb, N, kmin, kmax, bv, nbins)
 
             if np >= 4:
-                outp, phase, np = shift_sum_points(4, cargs) # pylint:disable=no-value-for-parameter
+                outp, lpoints, np = shift_sum_points(4, cargs)
             elif np >= 3:
-                outp, phase, np = shift_sum_points(3, cargs) # pylint:disable=no-value-for-parameter
+                outp, lpoints, np = shift_sum_points(3, cargs)
             elif np >= 2:
-                outp, phase, np = shift_sum_points(2, cargs) # pylint:disable=no-value-for-parameter
+                outp, lpoints, np = shift_sum_points(2, cargs)
             elif np == 1:
-                outp, phase, np = shift_sum_points(1, cargs) # pylint:disable=no-value-for-parameter
+                outp, lpoints, np = shift_sum_points(1, cargs)
 
     return cp.asnumpy((outc.conj() * outc).sum(axis=1).real)
 
