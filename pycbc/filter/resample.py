@@ -93,7 +93,7 @@ def lfilter(coefficients, timeseries):
             fft(Array(timeseries), tfreq)
             cout = zeros(flen, ftype)
             correlate(cfreq, tfreq, cout)
-            out = zeros(len(timeseries), dtype=timeseries)
+            out = zeros(len(timeseries), dtype=timeseries.dtype)
             ifft(cout, out)
 
         else:

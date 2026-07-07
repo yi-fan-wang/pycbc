@@ -281,14 +281,20 @@ class TimeSeries(Array):
         i = _numpy.asarray(_numpy.floor(fi)).astype(int)
         di = fi - i
 
+        def gather(idx):
+            # The gathered sample points may live on an accelerator; the
+            # interpolation below is host-side numpy, so bring them back.
+            vals = self._data[idx]
+            return vals.get() if hasattr(vals, 'get') else vals
+
         if interpolate == 'linear':
-            a = self[i]
-            b = self[i+1]
+            a = gather(i)
+            b = gather(i + 1)
             ans = a + (b - a) * di
         elif interpolate == 'quadratic':
-            c = self.data[i]
-            xr = self.data[i + 1] - c
-            xl = self.data[i - 1] - c
+            c = gather(i)
+            xr = gather(i + 1) - c
+            xl = gather(i - 1) - c
             a = 0.5 * (xr + xl)
             b = 0.5 * (xr - xl)
             ans = a * di**2.0 + b * di + c

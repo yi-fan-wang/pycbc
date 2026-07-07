@@ -221,6 +221,12 @@ class Array(object):
         # the device implementation, avoiding a host round-trip (and the
         # copy=False failure in _return for a host-side result).
         inputs = [i._data if isinstance(i, Array) else i for i in inputs]
+        # when mixing device-backed data with host numpy arrays, promote the
+        # host operands to the device (cupy rejects implicit mixing)
+        if any(hasattr(i, '__cuda_array_interface__') for i in inputs):
+            import cupy
+            inputs = [cupy.asarray(i) if isinstance(i, _numpy.ndarray) else i
+                      for i in inputs]
         ret = getattr(ufunc, method)(*inputs, **kwargs)
         if hasattr(ret, 'shape') and ret.shape == self.shape:
             ret = self._return(ret)
