@@ -28,6 +28,7 @@ from .base_data import BaseDataModel
 from .analytic import (TestEggbox, TestNormal, TestRosenbrock, TestVolcano,
                        TestPrior, TestPosterior)
 from .gaussian_noise import GaussianNoise
+from .batched_gaussian_noise import BatchedGaussianNoise
 from .marginalized_gaussian_noise import MarginalizedPhaseGaussianNoise
 from .marginalized_gaussian_noise import MarginalizedPolarization
 from .marginalized_gaussian_noise import MarginalizedHMPolPhase
@@ -195,6 +196,7 @@ _models = {_cls.name: _cls for _cls in (
     TestPosterior,
     TestPrior,
     GaussianNoise,
+    BatchedGaussianNoise,
     MarginalizedPhaseGaussianNoise,
     MarginalizedPolarization,
     MarginalizedHMPolPhase,
