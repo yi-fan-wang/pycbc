@@ -27,6 +27,7 @@ waveforms.
 """
 
 import os
+from collections import ChainMap
 import lal, numpy
 from pycbc.types import TimeSeries, FrequencySeries, zeros, Array
 from pycbc.types import real_same_precision_as, complex_same_precision_as
@@ -314,6 +315,17 @@ if pycbc.HAVE_CUDA:
 
 cuda_td = dict(list(_lalsim_td_approximants.items()) + list(_cuda_td_approximants.items()))
 cuda_fd = dict(list(_lalsim_fd_approximants.items()) + list(_cuda_fd_approximants.items()))
+
+# Waveforms available under the CuPy scheme. GPU-native implementations go in
+# the _cupy_*_approximants layer and take precedence; everything else falls
+# through to the CPU generators, whose output migrates to the device lazily
+# via the Array machinery. A ChainMap (rather than a copy) is used so that
+# approximants added to the cpu dicts later (plugins, TD<->FD transforms) are
+# also visible under the CuPy scheme.
+_cupy_td_approximants = {}
+_cupy_fd_approximants = {}
+cupy_td = ChainMap(_cupy_td_approximants, cpu_td)
+cupy_fd = ChainMap(_cupy_fd_approximants, cpu_fd)
 
 # List the various available approximants ####################################
 
@@ -1183,16 +1195,22 @@ def td_fd_waveform_transform(approximant):
 
         # We can also make a td version of this
         # This will override any existing approximants with the same name
-        # (ex. IMRPhenomXX)
-        cpu_td[approximant] = get_td_waveform_from_fd
+        # (ex. IMRPhenomXX), but must not do so when the fd version is itself
+        # derived from the td one (a native td approximant with a length
+        # estimator, e.g. a plugin): the two wrappers would then call each
+        # other in an infinite recursion.
+        if cpu_fd[approximant] is not get_fd_waveform_from_td:
+            cpu_td[approximant] = get_td_waveform_from_fd
 
 for apx in list(_filter_time_lengths.keys()) + list(cpu_fd.keys()):
     td_fd_waveform_transform(apx)
 
 td_wav = _scheme.ChooseBySchemeDict()
 fd_wav = _scheme.ChooseBySchemeDict()
-td_wav.update({_scheme.CPUScheme:cpu_td,_scheme.CUDAScheme:cuda_td})
-fd_wav.update({_scheme.CPUScheme:cpu_fd,_scheme.CUDAScheme:cuda_fd})
+td_wav.update({_scheme.CPUScheme:cpu_td,_scheme.CUDAScheme:cuda_td,
+               _scheme.CUPYScheme:cupy_td})
+fd_wav.update({_scheme.CPUScheme:cpu_fd,_scheme.CUDAScheme:cuda_fd,
+               _scheme.CUPYScheme:cupy_fd})
 sgburst_wav = {_scheme.CPUScheme:cpu_sgburst}
 
 def get_waveform_filter(out, template=None, **kwargs):
