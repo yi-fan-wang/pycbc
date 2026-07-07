@@ -76,6 +76,12 @@ try:
 except ImportError:
     pass
 
+try:
+    from .dingo import DingoSampler
+    samplers[DingoSampler.name] = DingoSampler
+except ImportError:
+    pass
+
 
 def load_from_config(cp, model, **kwargs):
     """Loads a sampler from the given config file.
