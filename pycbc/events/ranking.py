@@ -165,6 +165,76 @@ def newsnr_sgveto_psdvar_scaled_threshold(snr, bchisq, sgchisq, psd_var_val,
         return nsnr[0]
 
 
+def newsnr_sgveto_psdvar_scaled_threshold_autochisq(
+        snr, bchisq, sgchisq, psd_var_val, cont_chisq, cont_chisq_dof,
+        autochisq_onset=1.2, autochisq_power=0.75, **kwargs):
+    """Continuously reweight the current single-detector rank by autochisq.
+
+    The penalty is neutral below ``autochisq_onset``. Above the onset it uses
+    an Allen-like smooth transition with asymptotic power
+    ``autochisq_power``. This keeps autochisq as ranking information rather
+    than a hard veto.
+    """
+    nsnr = numpy.array(
+        newsnr_sgveto_psdvar_scaled_threshold(
+            snr,
+            bchisq,
+            sgchisq,
+            psd_var_val,
+            **kwargs
+        ),
+        ndmin=1,
+    )
+    reduced_autochisq = numpy.array(
+        numpy.asarray(cont_chisq) / numpy.asarray(cont_chisq_dof),
+        ndmin=1,
+    )
+    ratio = reduced_autochisq / autochisq_onset
+    active = numpy.isfinite(ratio) & (ratio > 1.0)
+    nsnr[active] *= (
+        0.5 * (1.0 + ratio[active] ** (6.0 * autochisq_power))
+    ) ** (-1.0 / 6.0)
+
+    if hasattr(snr, '__len__'):
+        return nsnr
+    else:
+        return nsnr[0]
+
+
+def newsnr_sgveto_psdvar_scaled_autochisq(
+        snr, bchisq, sgchisq, psd_var_val, cont_chisq, cont_chisq_dof,
+        autochisq_onset=1.2, autochisq_power=0.75, **kwargs):
+    """Continuously reweight the no-threshold rank by autochisq.
+
+    Unlike ``newsnr_sgveto_psdvar_scaled_threshold_autochisq``, this ranking
+    keeps the continuous Allen chi-square penalty when ``bchisq > 2``.
+    """
+    nsnr = numpy.array(
+        newsnr_sgveto_psdvar_scaled(
+            snr,
+            bchisq,
+            sgchisq,
+            psd_var_val,
+            **kwargs
+        ),
+        ndmin=1,
+    )
+    reduced_autochisq = numpy.array(
+        numpy.asarray(cont_chisq) / numpy.asarray(cont_chisq_dof),
+        ndmin=1,
+    )
+    ratio = reduced_autochisq / autochisq_onset
+    active = numpy.isfinite(ratio) & (ratio > 1.0)
+    nsnr[active] *= (
+        0.5 * (1.0 + ratio[active] ** (6.0 * autochisq_power))
+    ) ** (-1.0 / 6.0)
+
+    if hasattr(snr, '__len__'):
+        return nsnr
+    else:
+        return nsnr[0]
+
+
 def get_snr(trigs, **kwargs):  # pylint:disable=unused-argument
     """
     Return SNR from a trigs/dictionary object
@@ -340,6 +410,36 @@ def get_newsnr_sgveto_psdvar_scaled_threshold(trigs, **kwargs):
     return numpy.array(nsnr_sg_psdt, ndmin=1, dtype=numpy.float32)
 
 
+def get_newsnr_sgveto_psdvar_scaled_threshold_autochisq(trigs, **kwargs):
+    """Calculate the current single-detector rank with autochisq reweighting."""
+    dof = 2. * trigs['chisq_dof'][:] - 2.
+    rank = newsnr_sgveto_psdvar_scaled_threshold_autochisq(
+        trigs['snr'][:],
+        trigs['chisq'][:] / dof,
+        trigs['sg_chisq'][:],
+        trigs['psd_var_val'][:],
+        trigs['cont_chisq'][:],
+        trigs['cont_chisq_dof'][:],
+        **kwargs
+    )
+    return numpy.array(rank, ndmin=1, dtype=numpy.float32)
+
+
+def get_newsnr_sgveto_psdvar_scaled_autochisq(trigs, **kwargs):
+    """Calculate the continuous traditional-chi-square autochisq rank."""
+    dof = 2. * trigs['chisq_dof'][:] - 2.
+    rank = newsnr_sgveto_psdvar_scaled_autochisq(
+        trigs['snr'][:],
+        trigs['chisq'][:] / dof,
+        trigs['sg_chisq'][:],
+        trigs['psd_var_val'][:],
+        trigs['cont_chisq'][:],
+        trigs['cont_chisq_dof'][:],
+        **kwargs
+    )
+    return numpy.array(rank, ndmin=1, dtype=numpy.float32)
+
+
 sngls_ranking_function_dict = {
     'snr': get_snr,
     'newsnr': get_newsnr,
@@ -350,6 +450,10 @@ sngls_ranking_function_dict = {
     'newsnr_sgveto_psdvar_scaled': get_newsnr_sgveto_psdvar_scaled,
     'newsnr_sgveto_psdvar_scaled_threshold':
     get_newsnr_sgveto_psdvar_scaled_threshold,
+    'newsnr_sgveto_psdvar_scaled_threshold_autochisq':
+    get_newsnr_sgveto_psdvar_scaled_threshold_autochisq,
+    'newsnr_sgveto_psdvar_scaled_autochisq':
+    get_newsnr_sgveto_psdvar_scaled_autochisq,
 }
 
 # Lists of datasets required in the trigs object for each function
@@ -366,6 +470,12 @@ reqd_datasets['newsnr_sgveto_psdvar_scaled'] = \
     reqd_datasets['newsnr_sgveto_psdvar']
 reqd_datasets['newsnr_sgveto_psdvar_scaled_threshold'] = \
     reqd_datasets['newsnr_sgveto_psdvar']
+reqd_datasets['newsnr_sgveto_psdvar_scaled_threshold_autochisq'] = \
+    reqd_datasets['newsnr_sgveto_psdvar_scaled_threshold'] + \
+    ['cont_chisq', 'cont_chisq_dof']
+reqd_datasets['newsnr_sgveto_psdvar_scaled_autochisq'] = \
+    reqd_datasets['newsnr_sgveto_psdvar_scaled'] + \
+    ['cont_chisq', 'cont_chisq_dof']
 
 
 def get_sngls_ranking_from_trigs(trigs, statname, **kwargs):
