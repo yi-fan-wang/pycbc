@@ -18,9 +18,14 @@
 
 import sys
 import os
+import atexit
 import copy
+import fcntl
+import json
 import logging
 import argparse
+import shutil
+import uuid
 import numpy
 import time
 from pycbc.pool import BroadcastPool as Pool
@@ -28,6 +33,7 @@ from pycbc.pool import BroadcastPool as Pool
 import pycbc
 from pycbc import vetoes, psd, waveform, strain, scheme, fft, DYN_RANGE_FAC, events
 from pycbc.vetoes.sgchisq import SingleDetSGChisq
+from pycbc.vetoes.autochisq_deferred import DeferredAutochisq
 from pycbc.filter import MatchedFilterControl, qtransform
 from pycbc.types import zeros, float32, complex64
 import pycbc.opt
@@ -60,6 +66,11 @@ parser.add_argument("--update-progress-file",
                   type=str, default="progress.txt")
 parser.add_argument("--output", type=str, help="FIXME: ADD")
 parser.add_argument("--bank-file", type=str, help="FIXME: ADD")
+parser.add_argument('--stage-input', action='store_true',
+                    help="Stage the template bank to local storage before "
+                         "filtering")
+parser.add_argument('--stage-input-dir', type=str, default='/dev/shm',
+                    help="Directory in which to stage the template bank")
 parser.add_argument("--snr-threshold",
                   help="SNR threshold for trigger generation", type=float)
 parser.add_argument("--newsnr-threshold", type=float, metavar='THRESHOLD',
@@ -147,6 +158,30 @@ parser.add_argument("--autochi-max-valued-dof", action="store", metavar="INT",
                     help="If using --autochi-max-valued this value denotes "
                          "the pre-calculated mean value that will be stored "
                          "as the auto-chisq degrees-of-freedom value.")
+parser.add_argument("--autochi-deferred", action="store_true", default=False,
+                    help="Evaluate the auto-chisq only for the triggers that "
+                         "survive the final keep-loudest consolidation, "
+                         "instead of for every trigger as it is filtered. The "
+                         "sparse SNR samples the test reads are captured "
+                         "during filtering, so the result is unchanged; "
+                         "requires --keep-loudest-stat newsnr (the default) "
+                         "so trigger membership does not depend on the "
+                         "auto-chisq. Requires --autochi-deferred-snr-"
+                         "threshold and is incompatible with "
+                         "--multiprocessing-nprocesses and "
+                         "--autochi-reverse-template.")
+parser.add_argument("--autochi-deferred-snr-threshold", type=float,
+                    metavar="THRESHOLD",
+                    help="With --autochi-deferred, only triggers whose "
+                         "normalized raw SNR is strictly above THRESHOLD are "
+                         "captured and evaluated; the rest keep a zero auto-"
+                         "chisq. This is the same raw-SNR activation the eager "
+                         "path applies, and must sit at or below any "
+                         "downstream ranking threshold.")
+parser.add_argument("--autochi-deferred-audit-file", type=str,
+                    metavar="PATH",
+                    help="With --autochi-deferred, write per-run capture, "
+                         "prune and evaluation counters to this JSON file.")
 parser.add_argument("--downsample-factor", type=int,
                     help="Factor that determines the interval between the "
                          "initial SNR sampling. If not set (or 1) no sparse sample "
@@ -226,7 +261,72 @@ scheme.verify_processing_options(opt, parser)
 fft.verify_fft_options(opt,parser)
 pycbc.opt.verify_optimization_options(opt, parser)
 
+if opt.autochi_deferred:
+    if opt.autochi_deferred_snr_threshold is None:
+        parser.error("--autochi-deferred requires "
+                     "--autochi-deferred-snr-threshold")
+    if opt.autochi_reverse_template:
+        parser.error("--autochi-deferred does not support "
+                     "--autochi-reverse-template")
+    if opt.multiprocessing_nprocesses:
+        # Captured state lives in the parent process only.
+        parser.error("--autochi-deferred does not support "
+                     "--multiprocessing-nprocesses")
+    if opt.keep_loudest_stat != 'newsnr':
+        parser.error("--autochi-deferred requires --keep-loudest-stat newsnr "
+                     "so trigger membership does not depend on the auto-chisq")
+    if opt.checkpoint_interval or opt.checkpoint_exit_maxtime:
+        # A checkpoint stores the events but not the captured SNR samples, so
+        # a resumed run could not evaluate the events it inherits.
+        parser.error("--autochi-deferred does not support checkpointing")
+elif opt.autochi_deferred_snr_threshold is not None:
+    parser.error("--autochi-deferred-snr-threshold requires "
+                 "--autochi-deferred")
+
 pycbc.init_logging(opt.verbose)
+
+staged_bank_file = None
+
+
+def cleanup_staged_bank():
+    """Remove the temporary bank copy created by ``--stage-input``."""
+    if staged_bank_file is not None:
+        logging.info("Cleaning up staged template bank %s", staged_bank_file)
+        try:
+            os.remove(staged_bank_file)
+        except FileNotFoundError:
+            pass
+
+
+atexit.register(cleanup_staged_bank)
+
+if opt.stage_input:
+    if opt.bank_file is None:
+        parser.error("--stage-input requires --bank-file")
+    staged_bank_file = os.path.join(
+        opt.stage_input_dir,
+        'pycbc-inspiral-' + str(uuid.uuid4()) + '.hdf'
+    )
+    logging.info("Staging template bank %s to %s",
+                 opt.bank_file, staged_bank_file)
+    try:
+        lock_path = os.path.join(
+            opt.stage_input_dir,
+            '.pycbc-inspiral-stage-{}.lock'.format(os.getuid())
+        )
+        with open(lock_path, 'w') as stage_lock:
+            logging.info("Waiting for node-local bank staging lock %s",
+                         lock_path)
+            fcntl.flock(stage_lock, fcntl.LOCK_EX)
+            logging.info("Acquired node-local bank staging lock %s",
+                         lock_path)
+            shutil.copyfile(opt.bank_file, staged_bank_file)
+        if os.path.getsize(staged_bank_file) != os.path.getsize(opt.bank_file):
+            raise IOError("Staged template bank has the wrong size")
+    except Exception:
+        cleanup_staged_bank()
+        raise
+    opt.bank_file = staged_bank_file
 
 fft.from_cli(opt)
 inj_filter_rejector = pycbc.inject.InjFilterRejector.from_cli(opt)
@@ -253,6 +353,10 @@ def template_triggers(t_num):
         if template is None:
             template = bank[t_num]
             tparam = template.params
+            if deferred_autochisq is not None:
+                # Bind the hash to its bank row so the template can be
+                # rebuilt after the bank has moved on.
+                deferred_autochisq.register_bank_template(bank, t_num, template)
 
         if opt.update_progress:
             update_progress((t_num + (s_num / float(len(segments))) ) / len(bank),
@@ -284,10 +388,19 @@ def template_triggers(t_num):
                                       out_vals['chisq_dof'],
                                       idx+stilde.analyze.start)
 
-        out_vals['cont_chisq'], _ = \
-              autochisq.values(snr, idx+stilde.analyze.start, template,
-                               stilde.psd, norm, stilde=stilde,
-                               low_frequency_cutoff=flow)
+        if deferred_autochisq is None:
+            out_vals['cont_chisq'], _ = \
+                  autochisq.values(snr, idx+stilde.analyze.start, template,
+                                   stilde.psd, norm, stilde=stilde,
+                                   low_frequency_cutoff=flow)
+        else:
+            # Capture the sparse SNR samples now, evaluate after the final
+            # consolidation; the placeholder keeps the record shape.
+            out_vals['cont_chisq'], _ = \
+                  deferred_autochisq.capture(autochisq, snr,
+                                   idx+stilde.analyze.start, template,
+                                   stilde.psd, norm, stilde=stilde,
+                                   low_frequency_cutoff=flow)
 
         idx += stilde.cumulative_index
 
@@ -437,6 +550,14 @@ with ctx:
                                  take_maximum_value=opt.autochi_max_valued,
                                  maximal_value_dof=opt.autochi_max_valued_dof)
 
+    deferred_autochisq = None
+    if opt.autochi_deferred:
+        deferred_autochisq = DeferredAutochisq(
+            opt.autochi_deferred_snr_threshold)
+        logging.info("Auto-chisq deferred until after the final "
+                     "consolidation, for triggers with raw SNR > %s",
+                     opt.autochi_deferred_snr_threshold)
+
     logging.info("Overwhitening frequency-domain data segments")
     for seg in segments:
         seg /= seg.psd
@@ -485,6 +606,10 @@ with ctx:
 
         if opt.finalize_events_template_rate is not None:
             event_mgr.consolidate_events(opt, gwstrain=gwstrain)
+            if deferred_autochisq is not None:
+                # Rows this consolidation rejected can never return; releasing
+                # them here bounds the captured state for the whole run.
+                deferred_autochisq.prune_after_consolidation(event_mgr)
 
         if opt.checkpoint_interval and \
             (time.time() - tcheckpoint > opt.checkpoint_interval):
@@ -497,6 +622,12 @@ with ctx:
             sys.exit(opt.checkpoint_exit_code)
 
 event_mgr.consolidate_events(opt, gwstrain=gwstrain)
+if deferred_autochisq is not None:
+    deferred_autochisq.finalize(event_mgr)
+    if opt.autochi_deferred_audit_file:
+        with open(opt.autochi_deferred_audit_file, 'w') as audit_fp:
+            json.dump(deferred_autochisq.audit(), audit_fp,
+                      indent=2, sort_keys=True)
 event_mgr.finalize_events()
 logging.info("Outputting %s triggers" % str(len(event_mgr.events)))
 
