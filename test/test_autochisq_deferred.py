@@ -189,3 +189,66 @@ class DeferredAutochisqTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class StoragePrecisionSelectionTest(unittest.TestCase):
+    """Capture selection must use the stored-scalar magnitude semantics.
+
+    pycbc_inspiral stores snrv * norm in a complex64 events field.  Reading
+    one event back gives a numpy complex64 scalar whose Python ``abs()``
+    computes the magnitude in double precision and rounds to float32, while
+    numpy's vectorized abs on a complex64 array computes in single precision
+    throughout.  For a magnitude within one float32 ulp of the activation
+    threshold the two disagree; capture must match the scalar semantics the
+    prune/finalize checks apply, or the fail-closed check trips -- the
+    2026-08-05 production failure.
+    """
+
+    # Exact bits of the production trigger that failed deterministically:
+    # node inspiral-FULL_DATA-L1_ID3_ID0016686, key (-1490843478099418878,
+    # 585953).  Vectorized abs gives 5.5 (40b00000); scalar abs gives
+    # 5.5000005 (40b00001).
+    PROD_RE = numpy.frombuffer(bytes.fromhex("40ae4dba"), ">f4")[0]
+    PROD_IM = numpy.frombuffer(bytes.fromhex("3f4304be"), ">f4")[0]
+
+    def production_value(self):
+        return numpy.complex64(complex(float(self.PROD_RE),
+                                       float(self.PROD_IM)))
+
+    def test_production_bits_expose_the_abs_discrepancy(self):
+        value = self.production_value()
+        from pycbc.vetoes.autochisq_deferred import stored_trigger_magnitudes
+        vector = numpy.abs(numpy.array([value], dtype=numpy.complex64))[0]
+        scalar = abs(value)
+        self.assertFalse(vector > 5.5)          # single precision: 5.5
+        self.assertTrue(scalar > 5.5)           # double then round: 5.5000005
+        helper = stored_trigger_magnitudes([value])[0]
+        self.assertEqual(helper, numpy.float32(scalar))
+
+    def test_production_trigger_is_captured(self):
+        value = self.production_value()
+        instance = SingleDetAutoChisq(4, 2, twophase=True)
+        snr = numpy.zeros(4096, dtype=numpy.complex64)
+        snr[100] = value
+        selected, offsets, samples = capture_snr_neighborhoods(
+            instance, snr, [100], 1.0, threshold=5.5)
+        # Pre-fix the vectorized abs said 5.5 and skipped it, so the record
+        # the prune/finalize checks demand was never stored.
+        numpy.testing.assert_array_equal(selected, [100])
+
+    def test_selection_mask_matches_prune_semantics(self):
+        """Selection must equal an independent per-event scalar-abs loop over
+        the stored complex64 values, i.e. exactly what prune used to do."""
+        norm = numpy.float64(0.73125)
+        rng = numpy.random.default_rng(20260806)
+        mags = 5.5 + rng.uniform(-2e-6, 2e-6, size=5000)
+        phases = rng.uniform(0.0, 2.0 * numpy.pi, size=5000)
+        snr = ((mags / norm) * numpy.exp(1j * phases)).astype(numpy.complex64)
+        instance = SingleDetAutoChisq(4, 2, twophase=True)
+        selected, _, _ = capture_snr_neighborhoods(
+            instance, snr, numpy.arange(5000), norm, threshold=5.5)
+        stored = (snr * norm).astype(numpy.complex64)
+        expected = numpy.array(
+            [i for i, v in enumerate(stored) if abs(v) > 5.5],
+            dtype=numpy.int64)
+        numpy.testing.assert_array_equal(selected, expected)

@@ -59,8 +59,30 @@ __all__ = [
     'autochisq_offsets',
     'capture_snr_neighborhoods',
     'evaluate_snr_neighborhoods',
+    'stored_trigger_magnitudes',
     'DeferredAutochisq',
 ]
+
+
+def stored_trigger_magnitudes(snr_values):
+    """Return trigger magnitudes with the exact semantics of ``abs()`` on the
+    stored complex64 scalar.
+
+    The capture selection and the retained-event checks in prune/finalize must
+    agree bit for bit on which triggers are above the activation threshold.
+    The event manager stores ``snrv * norm`` in a complex64 field, and reading
+    one event back gives a numpy complex64 scalar whose Python ``abs()``
+    computes the magnitude in double precision and rounds the result to
+    float32.  numpy's vectorized ``abs`` on a complex64 *array* instead
+    computes in single precision throughout, and for a magnitude within one
+    float32 ulp of the threshold the two can disagree (observed in production:
+    bits ``40ae4dba/3f4304be`` give 5.5 vectorized but 5.5000005 as a scalar).
+    Every threshold comparison in this module therefore goes through this one
+    helper: cast the stored complex64 values to complex128, take the double
+    precision magnitude, round to float32.
+    """
+    arr = numpy.asarray(snr_values, dtype=numpy.complex64)
+    return numpy.abs(arr.astype(numpy.complex128)).astype(numpy.float32)
 
 
 def autochisq_offsets(instance, series_length):
@@ -116,8 +138,12 @@ def capture_snr_neighborhoods(instance, snr, indices, norm, threshold):
     """
     index_array = numpy.asarray(indices, dtype=numpy.int64)
     snr_array = numpy.asarray(snr)
-    center_snr = snr_array[index_array] * norm
-    selected = numpy.abs(center_snr) > float(threshold)
+    # Round the product to the complex64 precision the event manager stores,
+    # then compare with the same magnitude semantics prune/finalize apply to
+    # the stored scalar.  See stored_trigger_magnitudes for why neither step
+    # is optional at the activation boundary.
+    stored_snr = (snr_array[index_array] * norm).astype(numpy.complex64)
+    selected = stored_trigger_magnitudes(stored_snr) > float(threshold)
     selected_indices = index_array[selected]
     offsets = autochisq_offsets(instance, len(snr))
     if len(selected_indices) == 0:
@@ -344,8 +370,9 @@ class DeferredAutochisq(object):
             return
         retained_keys = set()
         missing = []
-        for event in event_manager.events:
-            if abs(event['snr']) <= self.threshold:
+        magnitudes = stored_trigger_magnitudes(event_manager.events['snr'])
+        for event, magnitude in zip(event_manager.events, magnitudes):
+            if magnitude <= self.threshold:
                 continue
             key = self._event_key(event_manager, event)
             retained_keys.add(key)
@@ -387,8 +414,9 @@ class DeferredAutochisq(object):
                 "trigger membership is independent of cont_chisq")
 
         grouped = defaultdict(list)
+        magnitudes = stored_trigger_magnitudes(events['snr'])
         for event_index, event in enumerate(events):
-            if abs(event['snr']) <= self.threshold:
+            if magnitudes[event_index] <= self.threshold:
                 continue
             self.final_above_threshold += 1
             key = self._event_key(event_manager, event)
