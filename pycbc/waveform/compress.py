@@ -180,6 +180,30 @@ def vecdiff(htilde, hinterp, sample_points, psd=None):
         vecdiffs[kk] = abs(_vecdiff(htilde, hinterp, thisf, nextf, psd=psd))
     return vecdiffs
 
+
+def _select_refinement_indices(sample_index, vecdiffs, tolerance,
+                               max_batch_size=1000):
+    """Select refinable frequency-bin midpoints in decreasing error order.
+
+    Intervals that already span adjacent frequency bins have no integer
+    midpoint.  Skip those intervals and continue down the error ranking rather
+    than treating an empty first batch as global convergence.
+    """
+    num_bad = (vecdiffs > tolerance).sum()
+    num_select = min(max_batch_size, num_bad // 2 + 1)
+    num_select = max(num_select, len(vecdiffs) // 20)
+
+    new_addidxs = []
+    for segment in vecdiffs.argsort()[::-1]:
+        left = int(sample_index[segment])
+        right = int(sample_index[segment + 1])
+        if right - left <= 1:
+            continue
+        new_addidxs.append((left + right) // 2)
+        if len(new_addidxs) == num_select:
+            break
+    return new_addidxs
+
 def compress_waveform(htilde, sample_points, tolerance, interpolation,
                       precision, decomp_scratch=None, psd=None):
     """Retrieves the amplitude and phase at the desired sample points, and adds
@@ -280,32 +304,13 @@ def compress_waveform(htilde, sample_points, tolerance, interpolation,
         iteration_start_time = time.time()
         iteration_count += 1
         
-        # Pick the worst bins
-        num_bad = (vecdiffs > tolerance).sum()
-        vsort = vecdiffs.argsort()[::-1]
-        
-        # This add fraction of the bad segments, up to a maximum 
-        # If there are no bad segments, we still try to add the first single
-        # one (can be large numerical error in the veddiff calculation, so
-        # rounding cause all to be below the tolerance yet thte full fails).
-        num_select = min(max_batch_size, (num_bad // 2 + 1))
-        # Hueristic to add multiple points if size is already large
-        num_select = max(num_select, len(vecdiffs) // 20)
-        selected_segments = vsort[:num_select]
-
         # --- 2. Propose new points ---
-        new_addidxs = []
-        for minpt in selected_segments:
-            # Calculate midpoint using indices to avoid float drift issues
-            add_freq = (sample_points[minpt] + sample_points[minpt+1]) / 2.0
-            addidx = int(add_freq / df)
-            if addidx not in sample_index and addidx not in new_addidxs:
-                new_addidxs.append(addidx)
-
-            # Don't propose points within a sample of existing ones
-            new_addidxs = numpy.array(new_addidxs)
-            valid = ~numpy.any(abs(new_addidxs[:, None] - numpy.array(added_points)) <= 2, axis=1)
-            new_addidxs = list(new_addidxs[valid])
+        # Continue past already atomic intervals instead of stopping while
+        # lower-ranked, still-refinable intervals remain.
+        new_addidxs = _select_refinement_indices(
+            sample_index, vecdiffs, tolerance,
+            max_batch_size=max_batch_size,
+        )
 
         # --- 3. Update and Sort ---
         sample_index = numpy.unique(numpy.concatenate((sample_index, new_addidxs)))
