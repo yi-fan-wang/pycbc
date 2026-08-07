@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 import argparse, logging, numpy as np
+import atexit, os, shutil, uuid
 from numpy.random import seed, shuffle
 
 import pycbc
 from pycbc.events import veto, coinc, stat
-from pycbc import io
+from pycbc import io, pool
 from pycbc.events import cuts
 from pycbc.types.optparse import MultiDetOptionAction
 from pycbc import init_logging
@@ -41,6 +42,13 @@ parser.add_argument('--cluster-window', type=float,
                          'Default=do not cluster')
 parser.add_argument("--output-file",
                     help="File to store the candidate triggers")
+parser.add_argument('--nprocesses', type=int, default=1,
+                    help="Number of processes to use")
+parser.add_argument('--stage-input', action='store_true',
+                    help="Stage input files through to speed up"
+                         "access by multiple processes")
+parser.add_argument('--stage-input-dir', type=str, default='/dev/shm',
+                    help="Directory to stage input files")
 parser.add_argument("--loudest-keep-values",
                     default='[6:1]',
                     help="Apply successive multiplicative levels of"
@@ -56,6 +64,22 @@ cuts.insert_cuts_option_group(parser)
 args = parser.parse_args()
 
 trigger_file = args.trigger_files[0]
+
+# Same staging pattern as pycbc_coinc_findtrigs: one sequential copy of the
+# merged trigger file into fast local storage (normally shared memory), so
+# the scattered per-template region reads and their gzip-chunk rereads never
+# touch the network filesystem again.
+if args.stage_input:
+    _staged = os.path.join(args.stage_input_dir, str(uuid.uuid4()) + '.hdf')
+
+    def _cleanup_staged():
+        try:
+            os.remove(_staged)
+        except OSError as e:
+            print(e)
+    atexit.register(_cleanup_staged)
+    shutil.copyfile(trigger_file, _staged)
+    trigger_file = _staged
 
 if (args.veto_files and not args.segment_name) or \
     (args.segment_name and not args.veto_files):
@@ -152,17 +176,11 @@ threshes = np.array(threshes)[threshorder]
 factors = np.array(factors)[threshorder]
 
 
-for i, tnum in enumerate(template_ids):
-    if i % 1000 == 0:
-        logging.info(
-            "Calculating statistic in template %d out of %d",
-            i, len(template_ids),
-        )
-    else:
-        logging.debug(
-            "Calculating statistic in template %d out of %d",
-            i, len(template_ids),
-        )
+def process_template(tnum):
+    # Per-template work is fully independent (no RNG, no cross-template
+    # state): identical results for any process count as long as the
+    # outputs are concatenated in template_ids order, which the
+    # order-preserving map below guarantees.
     tids_uncut = trigs.set_template(tnum)
 
     trigger_keep_ids = cuts.apply_trigger_cuts(trigs, trigger_cut_dict,
@@ -173,9 +191,8 @@ for i, tnum in enumerate(template_ids):
         logging.debug("%s triggers cut",
                       len(tids_uncut) - len(tids_full))
 
-    n_tot_trigs = tids_full.size
-    if n_tot_trigs == 0:
-        continue
+    if tids_full.size == 0:
+        return None
 
     # Stat class instance to calculate the ranking statistic
     sds = rank_method.single(trigs)[trigger_keep_ids]
@@ -187,7 +204,27 @@ for i, tnum in enumerate(template_ids):
         stat_t = stat_t[cid]
         tids_full = tids_full[cid]
         trigger_times = trigger_times[cid]
+    return tids_full, tnum, trigger_times, stat_t
 
+if args.nprocesses == 1:
+    results = []
+    for i, tnum in enumerate(template_ids):
+        if i % 1000 == 0:
+            logging.info(
+                "Calculating statistic in template %d out of %d",
+                i, len(template_ids),
+            )
+        results.append(process_template(tnum))
+else:
+    logging.info("Calculating statistics with %d processes",
+                 args.nprocesses)
+    p = pool.BroadcastPool(args.nprocesses)
+    results = p.map(process_template, list(template_ids))
+
+for res in results:
+    if res is None:
+        continue
+    tids_full, tnum, trigger_times, stat_t = res
     trigger_ids_all += list(tids_full)
     template_ids_all += list(tnum * np.ones_like(tids_full))
     trigger_times_all += list(trigger_times)
