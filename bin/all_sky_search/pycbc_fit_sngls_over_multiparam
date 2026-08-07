@@ -13,7 +13,7 @@
 # Public License for more details.
 
 
-import argparse, logging, numpy
+import argparse, logging, multiprocessing, numpy
 from scipy.stats import norm
 
 import pycbc
@@ -231,6 +231,12 @@ parser.add_argument("--smoothing-keywords", nargs='*',
 parser.add_argument("--output-fits-by-template", action='store_true',
                     help="If given, will output the input file fits to "
                          "fit_by_template group.")
+parser.add_argument("--smoothing-processes", type=int, default=1,
+                    help="Number of processes for the per-template smoothing "
+                         "loop. Each template's smoothing is independent, so "
+                         "results are identical to the serial loop; the loop "
+                         "is pure single-core python otherwise (~2 h for a "
+                         "3M-template bank). Default 1 (serial).")
 args = parser.parse_args()
 
 if args.smoothing_keywords:
@@ -467,24 +473,49 @@ elif numpy.isfinite(_smooth_cut[args.smoothing_method]):
                  n_removed.min(), n_removed.max())
 
     # Sort the values to be smoothed by parameter value
-    logging.info("Smoothing ...")
     nabove_sort =  nabove[par_sort]
     invalphan_sort = invalphan[par_sort]
     ntotal_sort = ntotal[par_sort]
     slices = [slice(l, r) for l, r in zip(lefts, rights)]
-    for i in rang:
-        report_percentage(i, num_templates)
-        slc = slices[i]
-        d = dist(i, slc, parvals, args.smoothing_width)
 
-        smoothed_vals[i,:] = smooth(
-            nabove_sort[slc],
-            invalphan_sort[slc],
-            ntotal_sort[slc],
-            d,
-            args.smoothing_method,
-            **kwarg_dict
-        )
+    def _smooth_range(bounds):
+        # Worker for a contiguous template range; arrays arrive via fork.
+        # Per-template arithmetic is exactly the serial loop's, so the
+        # assembled result is bitwise identical regardless of process count.
+        s, e = bounds
+        out = numpy.zeros((e - s, 3))
+        for i in range(s, e):
+            slc = slices[i]
+            d = dist(i, slc, parvals, args.smoothing_width)
+            out[i - s, :] = smooth(
+                nabove_sort[slc],
+                invalphan_sort[slc],
+                ntotal_sort[slc],
+                d,
+                args.smoothing_method,
+                **kwarg_dict
+            )
+        return s, out
+
+    if args.smoothing_processes > 1:
+        logging.info("Smoothing with %d processes ...",
+                     args.smoothing_processes)
+        edges = numpy.linspace(0, num_templates,
+                               args.smoothing_processes * 8 + 1).astype(int)
+        bounds = [(int(a), int(b)) for a, b in zip(edges[:-1], edges[1:])
+                  if b > a]
+        ctx = multiprocessing.get_context('fork')
+        with ctx.Pool(args.smoothing_processes) as pool:
+            for ndone, (s, out) in enumerate(
+                    pool.imap_unordered(_smooth_range, bounds)):
+                smoothed_vals[s:s + out.shape[0], :] = out
+                report_percentage(ndone, len(bounds))
+    else:
+        logging.info("Smoothing ...")
+        for i in rang:
+            report_percentage(i, num_templates)
+            s, out = _smooth_range((i, i + 1))
+            smoothed_vals[i, :] = out[0, :]
 
     # Undo the sorts
     unsort = numpy.argsort(par_sort)
