@@ -379,14 +379,27 @@ for j, tnum in enumerate(trange):
                                                     (tnum - tmin, tmax - tmin))
 
 logging.info("Calculating median sigma for each template")
-sigma_regions = trigf[args.ifo + '/sigmasq_template'][:]
+# Historical implementation read a region reference per template (millions
+# of tiny reads; adjacent templates share gzip chunks, so every chunk was
+# re-read and re-decompressed tens of times -- measured 10x file-size read
+# amplification and hours of wall time on chunk-scale merges). The region
+# for template i is exactly sigmasq[tb[i] : tb[i] + count_in_template[i]]
+# in the hash-sorted trigger order, so one sequential pass plus in-memory
+# slicing yields bitwise-identical medians.
+# The big per-trigger arrays are no longer needed; free them so the bulk
+# sigmasq column fits inside the job's memory request.
+del stat, tid, time, tsort
+sigmasq_all = trigf[args.ifo + '/sigmasq'][:]
 median_sigma = []
-for reg in sigma_regions:
-    strigs = trigf[args.ifo + '/sigmasq'][reg]
+for tnum in range(len(tb)):
+    l = tb[tnum]
+    r = l + count_in_template[tnum]
+    strigs = sigmasq_all[l:r]
     if len(strigs) == 0:
         median_sigma.append(np.nan)
         continue
     median_sigma.append(np.median(strigs) ** 0.5)
+del sigmasq_all
 
 outfile = HFile(args.output, 'w')
 outfile.create_dataset("template_id", data=trange)
