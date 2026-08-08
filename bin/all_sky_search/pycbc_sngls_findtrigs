@@ -81,6 +81,21 @@ if args.stage_input:
     shutil.copyfile(trigger_file, _staged)
     trigger_file = _staged
 
+    # The template bank is accessed per template inside the workers; stage
+    # it too so those tiny latency-bound reads never touch the network
+    # filesystem.
+    _staged_bank = os.path.join(args.stage_input_dir,
+                                str(uuid.uuid4()) + '.hdf')
+
+    def _cleanup_staged_bank():
+        try:
+            os.remove(_staged_bank)
+        except OSError as e:
+            print(e)
+    atexit.register(_cleanup_staged_bank)
+    shutil.copyfile(args.template_bank, _staged_bank)
+    args.template_bank = _staged_bank
+
 if (args.veto_files and not args.segment_name) or \
     (args.segment_name and not args.veto_files):
     raise RuntimeError('--veto-files and --segment-name are mutually required')
