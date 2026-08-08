@@ -115,6 +115,18 @@ def exit_cleaning():
             pass
 atexit.register(exit_cleaning)
 
+# The template bank is accessed per template inside the workers; stage it
+# next to the trigger files so those tiny latency-bound reads never touch
+# the network filesystem.
+if args.stage_input:
+    _bank_staged = os.path.join(args.stage_input_dir,
+                                str(uuid.uuid4()) + '.hdf')
+    logging.info("Moving %s to shared memory as %s",
+                 args.template_bank, _bank_staged)
+    cleanup_files.append(_bank_staged)
+    shutil.copyfile(args.template_bank, _bank_staged)
+    args.template_bank = _bank_staged
+
 # If some templates have no triggers one or more ifos, there can be no
 # coincs: so, track which templates contain triggers in all ifos
 tids_with_trigs = None
