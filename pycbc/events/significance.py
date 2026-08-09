@@ -58,6 +58,12 @@ def count_n_louder(bstat, fstat, dec,
     {} : (empty) dictionary
         Ensure we return the same tuple of objects as n_louder_from_fit()
     """
+    if len(bstat) == 0:
+        # No background events at all: by definition nothing is louder
+        # than any foreground event. Without this guard the searchsorted
+        # index below is forced to 0 and indexes an empty array.
+        return np.zeros_like(bstat), np.zeros_like(fstat), {}
+
     sort = bstat.argsort()
     bstat = copy.deepcopy(bstat)[sort]
     dec = copy.deepcopy(dec)[sort]
