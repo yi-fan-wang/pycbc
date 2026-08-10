@@ -125,6 +125,19 @@ if name_map is not None:
 logging.info("Getting template hashes")
 bankf.ensure_hash()
 
+# The eccentric master bank stores a placeholder template_duration
+# (constant 256 s: SEOBNRv6E cannot report its own length). Replace it
+# with the SEOBNRv4 IMR duration computed from the template parameters:
+# eccentricity only shortens a waveform, so this is a strict upper
+# bound, and it makes duration-based template cuts and binning honest.
+if 'template_duration' in bankf.table.fieldnames:
+    from pycbc import pnutils
+    logging.info("Recomputing template_duration as the SEOBNRv4 upper bound")
+    bankf.table['template_duration'][:] = pnutils.get_imr_duration(
+        bankf.table['mass1'], bankf.table['mass2'],
+        bankf.table['spin1z'], bankf.table['spin2z'],
+        bankf.table['f_lower'], approximant="SEOBNRv4")
+
 # write to output
 logging.info("Writing to %s" %(args.output_file))
 bankf.write_to_hdf(args.output_file, force=args.force,
