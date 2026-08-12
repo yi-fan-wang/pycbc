@@ -839,6 +839,8 @@ if len(files_for_combined_injfind) > 0:
         tags=['all','injections']
     )
 
+check_stop('injections', container, workflow, finalize_workflow)
+
 ############################ Injection plots #################################
 # Per injection run plots
 for inj_file, tag in zip(inj_files, inj_tags):
