@@ -147,6 +147,31 @@ parser.add_argument("--autochi-max-valued-dof", action="store", metavar="INT",
                     help="If using --autochi-max-valued this value denotes "
                          "the pre-calculated mean value that will be stored "
                          "as the auto-chisq degrees-of-freedom value.")
+parser.add_argument("--autochi-peak-selection", action="store_true",
+                    default=False,
+                    help="Select template-specific secondary autocorrelation "
+                         "peaks instead of uniformly spaced auto-chisq lags. "
+                         "The number of positive-lag peaks is set by "
+                         "--autochi-number-points.")
+parser.add_argument("--autochi-peak-max-lag", type=int,
+                    help="Largest positive lag, in samples, considered by "
+                         "--autochi-peak-selection.")
+parser.add_argument("--autochi-peak-min-lag", type=int, default=1,
+                    help="Smallest positive lag, in samples, considered by "
+                         "--autochi-peak-selection.")
+parser.add_argument("--autochi-peak-min-separation", type=int, default=1,
+                    help="Minimum separation, in samples, between selected "
+                         "positive-lag autocorrelation peaks.")
+parser.add_argument(
+    "--periastron-chisq",
+    action="store_true",
+    default=False,
+    help=(
+        "Calculate the covariance-aware incremental K=3 periastron "
+        "chi-square. SEOBNRv5E dynamics define time boundaries, while the "
+        "production search template defines all subfilters."
+    ),
+)
 parser.add_argument("--downsample-factor", type=int,
                     help="Factor that determines the interval between the "
                          "initial SNR sampling. If not set (or 1) no sparse sample "
@@ -305,6 +330,75 @@ def template_triggers(t_num):
         #print(out_vals_all)
     return out_vals_all, tparam
 
+
+def populate_periastron_chisq(event_mgr, bank, segments, statistic):
+    """Populate the observation-only feature after primary trigger generation.
+
+    Running the additional subfilter IFFTs inside the template loop can alter
+    later FFT planning and move a numerically tied clustered trigger by one
+    sample. Deferring the feature until all baseline clustering and retention
+    decisions are complete makes observation-only mode membership invariant.
+    """
+    if not statistic.do or len(event_mgr.events) == 0:
+        return
+
+    events_array = event_mgr.events
+    hash_to_bank_index = {
+        int(template_hash): index
+        for index, template_hash in enumerate(bank.table.template_hash)
+    }
+    assigned = numpy.zeros(len(events_array), dtype=bool)
+    for event_template_id in numpy.unique(events_array["template_id"]):
+        params = event_mgr.template_params[int(event_template_id)]["tmplt"]
+        template_hash = int(params.template_hash)
+        if template_hash not in hash_to_bank_index:
+            raise RuntimeError(
+                "Trigger template hash is absent from the filter bank"
+            )
+        template = bank[hash_to_bank_index[template_hash]]
+        template_events = numpy.flatnonzero(
+            events_array["template_id"] == event_template_id
+        )
+        for stilde in segments:
+            # Stored time_index is relative to the concatenated analyzable
+            # regions. ThresholdCluster returns indices relative to
+            # stilde.analyze, while cumulative_index already includes
+            # analyze.start in the original strain coordinates.
+            start = stilde.cumulative_index
+            end = start + (
+                stilde.analyze.stop - stilde.analyze.start
+            )
+            time_indices = events_array["time_index"][template_events]
+            in_segment = (time_indices >= start) & (time_indices < end)
+            selected = template_events[in_segment]
+            if len(selected) == 0:
+                continue
+            local_indices = (
+                events_array["time_index"][selected]
+                - stilde.cumulative_index
+                + stilde.analyze.start
+            )
+            values, dof = statistic.values(
+                template,
+                stilde.psd,
+                stilde,
+                events_array["snr"][selected],
+                1.0,
+                local_indices,
+            )
+            events_array["ecc_tchisq"][selected] = values
+            events_array["ecc_tchisq_dof"][selected] = dof
+            events_array["ecc_tchisq_lambda"][selected] = (
+                statistic.mismatch_lambda_values(template, dof)
+            )
+            assigned[selected] = True
+    if not numpy.all(assigned):
+        raise RuntimeError(
+            "Some retained triggers were not assigned to a Fourier segment "
+            "during periastron chi-square post-processing"
+        )
+
+
 with ctx:
     if opt.fft_backends == 'fftw':
 
@@ -342,6 +436,9 @@ with ctx:
         'bank_chisq'     : float32,
         'bank_chisq_dof' : int,
         'cont_chisq'     : float32,
+        'ecc_tchisq'     : float32,
+        'ecc_tchisq_dof' : int,
+        'ecc_tchisq_lambda': float32,
         'psd_var_val'    : float32,
         'sigmasq'        : float32,
                 }
@@ -435,7 +532,18 @@ with ctx:
                                  twophase=opt.autochi_two_phase,
                                  reverse_template=opt.autochi_reverse_template,
                                  take_maximum_value=opt.autochi_max_valued,
-                                 maximal_value_dof=opt.autochi_max_valued_dof)
+                                 maximal_value_dof=opt.autochi_max_valued_dof,
+                                 peak_selection=opt.autochi_peak_selection,
+                                 peak_max_lag=opt.autochi_peak_max_lag,
+                                 peak_min_lag=opt.autochi_peak_min_lag,
+                                 peak_min_separation=
+                                 opt.autochi_peak_min_separation)
+
+    periastron_chisq = vetoes.SingleDetPeriastronChisq(
+        opt.periastron_chisq,
+        opt.sample_rate,
+        flow,
+    )
 
     logging.info("Overwhitening frequency-domain data segments")
     for seg in segments:
@@ -498,6 +606,9 @@ with ctx:
 
 event_mgr.consolidate_events(opt, gwstrain=gwstrain)
 event_mgr.finalize_events()
+populate_periastron_chisq(
+    event_mgr, bank, segments, periastron_chisq
+)
 logging.info("Outputting %s triggers" % str(len(event_mgr.events)))
 
 tstop = time.time()

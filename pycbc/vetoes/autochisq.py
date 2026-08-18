@@ -22,9 +22,86 @@ import logging
 BACKEND_PREFIX="pycbc.vetoes.autochisq_"
 
 
+def select_autocorrelation_peak_lags(
+        hautocorr, num_peaks, max_lag, min_lag=1, min_separation=1):
+    """Select template-specific secondary autocorrelation peaks.
+
+    The positive-lag peaks are selected by autocorrelation magnitude and then
+    mirrored to negative lags.  Local maxima are preferred.  If a template has
+    fewer local maxima than requested, the strongest remaining lags are used
+    while preserving the requested minimum separation.
+
+    Parameters
+    ----------
+    hautocorr : Array
+        Normalized, cyclic template autocorrelation with zero lag at index 0.
+    num_peaks : int
+        Number of positive-lag peaks to select.
+    max_lag : int
+        Largest positive lag, in samples, that may be selected.
+    min_lag : int, optional
+        Smallest positive lag, in samples, that may be selected.
+    min_separation : int, optional
+        Minimum separation, in samples, between selected positive lags.
+
+    Returns
+    -------
+    numpy.ndarray
+        Two-sided lag array containing ``2 * num_peaks`` samples.
+    """
+    if num_peaks < 1:
+        raise ValueError("num_peaks must be positive")
+    if min_lag < 1:
+        raise ValueError("min_lag must be at least one sample")
+    if max_lag < min_lag:
+        raise ValueError("max_lag must be greater than or equal to min_lag")
+    if min_separation < 1:
+        raise ValueError("min_separation must be positive")
+    if max_lag >= len(hautocorr) // 2:
+        raise ValueError("max_lag must be smaller than half the FFT length")
+
+    positive_lags = np.arange(min_lag, max_lag + 1, dtype=np.int64)
+    autocorr_power = np.abs(np.asarray(hautocorr)[positive_lags]) ** 2
+    finite = np.isfinite(autocorr_power) & (autocorr_power < 1.0 - 1e-10)
+
+    local_maximum = np.zeros(len(positive_lags), dtype=bool)
+    if len(positive_lags) > 2:
+        local_maximum[1:-1] = (
+            (autocorr_power[1:-1] >= autocorr_power[:-2])
+            & (autocorr_power[1:-1] > autocorr_power[2:])
+        )
+    candidate_order = np.concatenate(
+        (
+            np.flatnonzero(finite & local_maximum)[
+                np.argsort(autocorr_power[finite & local_maximum])[::-1]
+            ],
+            np.flatnonzero(finite)[np.argsort(autocorr_power[finite])[::-1]],
+        )
+    )
+
+    selected = []
+    for candidate_index in candidate_order:
+        lag = int(positive_lags[candidate_index])
+        if lag in selected:
+            continue
+        if all(abs(lag - other) >= min_separation for other in selected):
+            selected.append(lag)
+        if len(selected) == num_peaks:
+            break
+
+    if len(selected) != num_peaks:
+        raise ValueError(
+            "Cannot select the requested number of autocorrelation peaks "
+            "with the specified lag range and minimum separation"
+        )
+
+    positive = np.sort(np.asarray(selected, dtype=np.int64))
+    return np.concatenate((-positive[::-1], positive))
+
+
 def autochisq_from_precomputed(sn, corr_sn, hautocorr, indices,
                        stride=1, num_points=None, oneside=None,
-                       twophase=True, maxvalued=False):
+                       twophase=True, maxvalued=False, lag_indices=None):
     """
     Compute correlation (two sided) between template and data
     and compares with autocorrelation of the template: C(t) = IFFT(A*A/S(f))
@@ -58,6 +135,9 @@ def autochisq_from_precomputed(sn, corr_sn, hautocorr, indices,
     maxvalued: Boolean, optional; default=False
         Return the largest auto-chisq at any of the points tested if True.
         If False, return the sum of auto-chisq at all points tested.
+    lag_indices: Array[int], optional
+        Explicit template-relative lags to test. When given, ``stride``,
+        ``num_points``, and ``oneside`` are ignored.
 
     Returns
     -------
@@ -79,17 +159,20 @@ def autochisq_from_precomputed(sn, corr_sn, hautocorr, indices,
     cphi_array = (sn[indices]).real / snrabs
     sphi_array = (sn[indices]).imag / snrabs
 
-    start_point = - stride*num_points
-    end_point = stride*num_points+1
-    if oneside == 'left':
-        achisq_idx_list = np.arange(start_point, 0, stride)
-    elif oneside == 'right':
-        achisq_idx_list = np.arange(stride, end_point, stride)
+    if lag_indices is not None:
+        achisq_idx_list = np.asarray(lag_indices, dtype=np.int64)
     else:
-        achisq_idx_list_pt1 = np.arange(start_point, 0, stride)
-        achisq_idx_list_pt2 = np.arange(stride, end_point, stride)
-        achisq_idx_list = np.append(achisq_idx_list_pt1,
-                                    achisq_idx_list_pt2)
+        start_point = - stride*num_points
+        end_point = stride*num_points+1
+        if oneside == 'left':
+            achisq_idx_list = np.arange(start_point, 0, stride)
+        elif oneside == 'right':
+            achisq_idx_list = np.arange(stride, end_point, stride)
+        else:
+            achisq_idx_list_pt1 = np.arange(start_point, 0, stride)
+            achisq_idx_list_pt2 = np.arange(stride, end_point, stride)
+            achisq_idx_list = np.append(achisq_idx_list_pt1,
+                                        achisq_idx_list_pt2)
 
     hauto_corr_vec = hautocorr[achisq_idx_list]
     hauto_norm = hauto_corr_vec.real*hauto_corr_vec.real
@@ -128,9 +211,12 @@ def autochisq_from_precomputed(sn, corr_sn, hautocorr, indices,
         else:
             achisq[ip] = curr_achisq_list.sum()
 
-    dof = num_points
-    if oneside is None:
-        dof = dof * 2
+    if lag_indices is not None:
+        dof = len(achisq_idx_list)
+    else:
+        dof = num_points
+        if oneside is None:
+            dof = dof * 2
     if twophase:
         dof = dof * 2
 
@@ -142,7 +228,9 @@ class SingleDetAutoChisq(object):
     """
     def __init__(self, stride, num_points, onesided=None, twophase=False,
                  reverse_template=False, take_maximum_value=False,
-                 maximal_value_dof=None):
+                 maximal_value_dof=None, peak_selection=False,
+                 peak_max_lag=None, peak_min_lag=1,
+                 peak_min_separation=1):
         """
         Initialize autochisq calculation instance
 
@@ -170,6 +258,15 @@ class SingleDetAutoChisq(object):
         maximal_value_dof : int, required if using take_maximum_value
             If using take_maximum_value the expected value is not known. This
             value specifies what to store in the cont_chisq_dof output.
+        peak_selection : bool, optional
+            Select template-specific autocorrelation peaks instead of uniformly
+            spaced lags.
+        peak_max_lag : int, required if using peak_selection
+            Largest lag, in samples, considered by peak selection.
+        peak_min_lag : int, optional
+            Smallest lag, in samples, considered by peak selection.
+        peak_min_separation : int, optional
+            Minimum separation between selected positive-lag peaks, in samples.
         """
         if stride > 0:
             self.do = True
@@ -185,6 +282,19 @@ class SingleDetAutoChisq(object):
             if self.two_phase:
                 self.dof = self.dof * 2
             self.reverse_template = reverse_template
+            self.peak_selection = peak_selection
+            self.peak_max_lag = peak_max_lag
+            self.peak_min_lag = peak_min_lag
+            self.peak_min_separation = peak_min_separation
+            if self.peak_selection and self.one_sided is not None:
+                raise ValueError(
+                    "Peak-selected autochisq currently requires two-sided lags"
+                )
+            if self.peak_selection and self.peak_max_lag is None:
+                raise ValueError(
+                    "peak_max_lag is required for peak-selected autochisq"
+                )
+            self._peak_lags = None
             self.take_maximum_value=take_maximum_value
             if self.take_maximum_value:
                 if maximal_value_dof is None:
@@ -270,6 +380,14 @@ class SingleDetAutoChisq(object):
                 Pt *= norm_fac
                 self._autocor = Array(Pt, copy=True)
             self._autocor_id = key
+            if self.peak_selection:
+                self._peak_lags = select_autocorrelation_peak_lags(
+                    self._autocor,
+                    self.num_points,
+                    self.peak_max_lag,
+                    min_lag=self.peak_min_lag,
+                    min_separation=self.peak_min_separation
+                )
 
         logging.debug("...Calculating autochisquare")
         sn = sn * norm
@@ -296,7 +414,8 @@ class SingleDetAutoChisq(object):
             num_points=self.num_points,
             oneside=self.one_sided,
             twophase=self.two_phase,
-            maxvalued=self.take_maximum_value
+            maxvalued=self.take_maximum_value,
+            lag_indices=self._peak_lags if self.peak_selection else None
         )
         self.dof = dof
         return achi_list, dof

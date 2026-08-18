@@ -3,7 +3,11 @@ set_measure_level(0)
 from pycbc.filter import  matched_filter_core
 from pycbc.types import Array, TimeSeries, FrequencySeries
 from pycbc.waveform import get_td_waveform
-from pycbc.vetoes import make_frequency_series, autochisq_from_precomputed
+from pycbc.vetoes import (
+    make_frequency_series,
+    autochisq_from_precomputed,
+    select_autocorrelation_peak_lags,
+)
 import numpy as np
 from math import cos, sin, pi, exp
 import unittest
@@ -172,6 +176,66 @@ class TestAutochisquare(unittest.TestCase):
         self.assertTrue(achisq[0] > 6.8e3)
         self.assertTrue(achisq[2] > 6.8e3)
 
+    def test_peak_lag_selection(self):
+        autocorr = np.zeros(2048, dtype=np.complex128)
+        autocorr[0] = 1.0
+        for lag, value in ((100, 0.8), (200, 0.7), (300, 0.6)):
+            autocorr[lag] = value
+            autocorr[-lag] = value
+
+        lags = select_autocorrelation_peak_lags(
+            autocorr,
+            num_peaks=3,
+            max_lag=400,
+            min_lag=20,
+            min_separation=50,
+        )
+        np.testing.assert_array_equal(lags, [-300, -200, -100, 100, 200, 300])
+
+    def test_peak_selected_signal_and_single_burst(self):
+        autocorr = np.zeros(2048, dtype=np.complex128)
+        autocorr[0] = 1.0
+        for lag, value in ((100, 0.8), (200, 0.7), (300, 0.6)):
+            autocorr[lag] = value
+            autocorr[-lag] = value
+
+        lags = select_autocorrelation_peak_lags(
+            autocorr,
+            num_peaks=3,
+            max_lag=400,
+            min_lag=20,
+            min_separation=50,
+        )
+        trigger_index = 1000
+        signal_snr = np.zeros(2048, dtype=np.complex128)
+        signal_snr[trigger_index] = 10.0
+        signal_snr[trigger_index + lags] = 10.0 * autocorr[lags]
+
+        single_burst_snr = np.zeros(2048, dtype=np.complex128)
+        single_burst_snr[trigger_index] = 10.0
+
+        signal_dof, signal_chisq = autochisq_from_precomputed(
+            signal_snr,
+            signal_snr,
+            autocorr,
+            np.array([trigger_index]),
+            twophase=True,
+            lag_indices=lags,
+        )
+        burst_dof, burst_chisq = autochisq_from_precomputed(
+            single_burst_snr,
+            single_burst_snr,
+            autocorr,
+            np.array([trigger_index]),
+            twophase=True,
+            lag_indices=lags,
+        )
+
+        self.assertEqual(signal_dof, 12)
+        self.assertEqual(burst_dof, 12)
+        self.assertAlmostEqual(signal_chisq[0], 0.0, places=12)
+        self.assertGreater(burst_chisq[0] / burst_dof, 10.0)
+
 
     #    with _context:
         #    dof, achi_list = autochisq(self.htilde, sig_tilde, psd,  stride=3,  num_points=20, \
@@ -191,4 +255,3 @@ suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestAutochisquare))
 if __name__ == '__main__':
     results = unittest.TextTestRunner(verbosity=2).run(suite)
     simple_exit(results)
-

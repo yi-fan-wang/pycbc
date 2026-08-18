@@ -505,6 +505,9 @@ class EventManager(object):
             f['bank_chisq'] = self.events['bank_chisq']
             f['bank_chisq_dof'] = self.events['bank_chisq_dof']
             f['cont_chisq'] = self.events['cont_chisq']
+            f['ecc_tchisq'] = self.events['ecc_tchisq']
+            f['ecc_tchisq_dof'] = self.events['ecc_tchisq_dof']
+            f['ecc_tchisq_lambda'] = self.events['ecc_tchisq_lambda']
             f['end_time'] = self.events['time_index'] / \
                               float(self.opt.sample_rate) \
                             + self.opt.gps_start_time
