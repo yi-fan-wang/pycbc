@@ -1,0 +1,27 @@
+import unittest
+from unittest.mock import patch
+import numpy as np
+
+from pycbc_fit_sngls_by_template import get_stat
+
+class TestGetStat(unittest.TestCase):
+
+    def test_get_stat(self):
+        args = argparse.Namespace()
+        args.ifo = 'H1'
+        args.stat_threshold = 5.0
+
+        trigs = {
+            'end_time': np.array([1, 2, 3, 4, 5]),
+            'stat': np.array([4.0, 5.0, 6.0, 7.0, 8.0])
+        }
+
+        select, stat = get_stat(args, trigs, args.stat_threshold)
+
+        self.assertEqual(len(select), 5)
+        self.assertEqual(len(stat), 3)
+        self.assertTrue(np.all(select))
+        self.assertTrue(np.all(stat >= args.stat_threshold))
+
+if __name__ == '__main__':
+    unittest.main()
