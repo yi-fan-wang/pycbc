@@ -69,7 +69,10 @@ if len(zdata) > 0:
         f['foreground/%s' % key] = zdata.data[key]
 else:
     for key in zdata.data:
-        f['foreground/%s' % key] = numpy.array([], dtype=zdata.data[key].dtype)
+        # when no zerolag coincidences exist the column may be a plain
+        # (empty) list, which has no dtype attribute
+        dtype = getattr(zdata.data[key], 'dtype', numpy.float64)
+        f['foreground/%s' % key] = numpy.array([], dtype=dtype)
 
 logging.info('calculating statistics excluding zerolag')
 fb = pycbc.io.HFile(args.full_data_background, "r")
