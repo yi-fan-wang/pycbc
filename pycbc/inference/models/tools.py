@@ -751,6 +751,7 @@ class DistMarg():
 
         if rec is None:
             rec = {}
+        has_reconstruction = False
 
         if set_loglr is None:
             def get_loglr():
@@ -770,6 +771,7 @@ class DistMarg():
             for k in self.marginalize_vector_params:
                 rec[k] = self.marginalize_vector_params[k][xl]
             self.reconstruct_vector = False
+            has_reconstruction = True
 
         if self.distance_marginalization:
             logging.debug('Reconstruct distance')
@@ -780,6 +782,7 @@ class DistMarg():
             xl = draw_sample(loglr + numpy.log(weights))
             rec['distance'] = self.dist_locs[xl]
             self.reconstruct_distance = False
+            has_reconstruction = True
 
         if self.marginalize_phase:
             logging.debug('Reconstruct phase')
@@ -791,8 +794,12 @@ class DistMarg():
             xl = draw_sample(loglr)
             rec['coa_phase'] = phasev[xl]
             self.reconstruct_phase = False
+            has_reconstruction = True
 
-        rec['loglr'] = loglr[xl]
+        if has_reconstruction:
+            rec['loglr'] = loglr[xl]
+        else:
+            rec['loglr'] = get_loglr()
         rec['loglikelihood'] = self.lognl + rec['loglr']
         return rec
 

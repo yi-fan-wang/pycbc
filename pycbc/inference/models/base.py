@@ -563,7 +563,9 @@ class BaseModel(metaclass=ABCMeta):
     def _logprior(self):
         """Calculates the log prior at the current parameters."""
         logj = self.logjacobian
-        logp = self.prior_distribution(**self.current_params) + logj
+        prior_params = {p: self.current_params[p]
+                        for p in self.prior_distribution.variable_args}
+        logp = self.prior_distribution(**prior_params) + logj
         if numpy.isnan(logp):
             logp = -numpy.inf
         return logp
